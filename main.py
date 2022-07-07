@@ -1,23 +1,26 @@
+# noinspection PyUnresolvedReferences
+from torchaudio import transforms, load
 from pathlib import Path
-from torchaudio import transforms
 from IPython.display import Audio
 from torch.utils.data import DataLoader, Dataset, random_split
-
+from random import random, randint
+from torch import Tensor, roll
+from typing import Tuple
+import matplotlib.pyplot as plt
 import pandas as pd
-import math, random
+import math
 import torch
 import torchaudio
 
-# Dataframe for training data filenames and labels
-df = pd.DataFrame()
-df["filename"] = pd.Series([], dtype=object)
-df["class"] = pd.Series([], dtype=int)
+# Typing
+AudioFile = Tuple[Tensor, int]
 
 # Dataframe initialization
 dataset_path = Path.cwd() / 'Datasets'
+col = ['filename', 'class']
 df = pd.concat([
-    pd.DataFrame(((i, int(index)) for i in dataset_type_folder.iterdir()), columns=df.columns)
-    for index, dataset_type_folder in enumerate(dataset_path.iterdir())
+    pd.DataFrame(((file, int(index)) for file in folder.iterdir()), columns=col)
+    for index, folder in enumerate(dataset_path.iterdir())
 ], ignore_index=True)
 
 
@@ -25,126 +28,180 @@ class AudioUtil:
 
     # Load an audio file. Return the signal as a tensor and the sample rate
     @staticmethod
-    def open(audio_file):
-        sig, sr = torchaudio.load(audio_file)
-        return sig, sr
+    def open(audio_file: Path) -> AudioFile:
+        # noinspection PyUnresolvedReferences
+        signal, sample_rate = load(audio_file)
+        return signal, sample_rate
 
-    # ----------------------------
     # Convert the given audio to the desired number of channels
-    # ----------------------------
     @staticmethod
-    def rechannel(aud, new_channel):
-        sig, sr = aud
+    def rechannel(aud: AudioFile, new_channel_count: int = 2) -> AudioFile:
+        signal, sample_rate = aud
 
-        if sig.shape[0] == new_channel:
-            # Nothing to do
+        # Nothing to do
+        if signal.shape[0] == new_channel_count:
             return aud
 
-        if new_channel == 1:
-            # Convert from stereo to mono by selecting only the first channel
-            resig = sig[:1, :]
+        # Convert from stereo to mono by selecting only the first channel
+        if new_channel_count == 1:
+            resig = signal[:1, :]
+
+        # Convert from mono to stereo by duplicating the first channel
         else:
-            # Convert from mono to stereo by duplicating the first channel
-            resig = torch.cat([sig, sig])
+            resig = torch.cat([signal, signal])
 
-        return (resig, sr)
+        return resig, sample_rate
 
-    # ----------------------------
-    # Since Resample applies to a single channel, we resample one channel at a time
-    # ----------------------------
+    # Since Resample applies to a single channel, we resample one at a time
     @staticmethod
-    def resample(aud, newsr):
-        sig, sr = aud
+    def resample(aud: AudioFile, new_rate: int = 44100) -> AudioFile:
+        signal, sample_rate = aud
+        num_channels = signal.shape[0]
 
-        if (sr == newsr):
-            # Nothing to do
+        # Nothing to do
+        if sample_rate == new_rate:
             return aud
 
-        num_channels = sig.shape[0]
         # Resample first channel
-        resig = torchaudio.transforms.Resample(sr, newsr)(sig[:1,:])
-        if (num_channels > 1):
-            # Resample the second channel and merge both channels
-            retwo = torchaudio.transforms.Resample(sr, newsr)(sig[1:,:])
+        resig = transforms.Resample(sample_rate, new_rate)(signal[:1, :])
+
+        # Resample the second channel and merge both channels
+        if num_channels > 1:
+            retwo = transforms.Resample(sample_rate, new_rate)(signal[1:, :])
             resig = torch.cat([resig, retwo])
 
-        return resig, newsr
+        return resig, new_rate
 
     # Pad (or truncate) the signal to a fixed length 'max_ms' in milliseconds
     @staticmethod
-    def pad_trunc(aud, max_ms):
-        sig, sr = aud
-        num_rows, sig_len = sig.shape
-        max_len = sr // 1000 * max_ms
+    def pad_trunc(aud: AudioFile, max_ms: int = 3000) -> AudioFile:
+        signal, sample_rate = aud
+        num_rows, sig_len = signal.shape
+        max_len = sample_rate // 1000 * max_ms
 
-        if (sig_len > max_len):
-            # Truncate the signal to the given length
-            sig = sig[:, :max_len]
+        # Truncate the signal to the given length
+        if sig_len > max_len:
+            signal = signal[:, :max_len]
 
-        elif (sig_len < max_len):
-            # Length of padding to add at the beginning and end of the signal
-            pad_begin_len = random.randint(0, max_len - sig_len)
+        # Length of padding to add at the beginning and end of the signal
+        elif sig_len < max_len:
+            pad_begin_len = randint(0, max_len - sig_len)
             pad_end_len = max_len - sig_len - pad_begin_len
-
-            # Pad with 0s
             pad_begin = torch.zeros((num_rows, pad_begin_len))
             pad_end = torch.zeros((num_rows, pad_end_len))
+            signal = torch.cat((pad_begin, signal, pad_end), 1)
 
-            sig = torch.cat((pad_begin, sig, pad_end), 1)
-
-        return (sig, sr)
+        return signal, sample_rate
 
     # Shifts the signal to the left or right by some percent. Values at the end
     # are 'wrapped around' to the start of the transformed signal.
     @staticmethod
-    def time_shift(aud, shift_limit):
-        sig, sr = aud
-        _, sig_len = sig.shape
-        shift_amt = int(random.random() * shift_limit * sig_len)
-        return (sig.roll(shift_amt), sr)
+    def time_shift(aud: AudioFile, shift_limit: float = 0.4) -> AudioFile:
+        signal, sample_rate = aud
+        _, sig_len = signal.shape
+        shift_amt = int(random() * shift_limit * sig_len)
+
+        # noinspection PyArgumentList
+        return signal.roll(shift_amt), sample_rate
 
     # Generate a Spectrogram
     @staticmethod
-    def spectro_gram(aud, n_mels=64, n_fft=1024, hop_len=None):
-        sig, sr = aud
-        top_db = 80
+    def spectrogram(aud, n_mels=64, n_fft=1024, hop_len=None) -> Tensor:
+        signal, signal_rate = aud
 
-        # spec has shape [channel, n_mels, time], where channel is mono, stereo etc
-        spec = transforms.MelSpectrogram(sr, n_fft=n_fft, hop_length=hop_len, n_mels=n_mels)(sig)
+        # spec has shape [channel, n_mels, time]
+        # where channel is mono, stereo etc
+        spec = transforms.MelSpectrogram(
+            signal_rate,
+            n_fft=n_fft,
+            hop_length=hop_len,
+            n_mels=n_mels
+        )(signal)
 
         # Convert to decibels
-        spec = transforms.AmplitudeToDB(top_db=top_db)(spec)
-        return (spec)
+        return transforms.AmplitudeToDB(top_db=80)(spec)
 
-    # Augment the Spectrogram by masking out some sections of it in both the frequency
-    # dimension (ie. horizontal bars) and the time dimension (vertical bars) to prevent
-    # overfitting and to help the model generalise better. The masked sections are
-    # replaced with the mean value.
+    # Augment the Spectrogram by masking out some sections of it in both the
+    # frequency dimension (i.e. horizontal bars) and the time dimension
+    # (vertical bars) to prevent overfitting and to help the model generalise
+    # better. The masked sections are replaced with the mean value.
     @staticmethod
-    def spectro_augment(spec, max_mask_pct=0.1, n_freq_masks=1, n_time_masks=1):
+    def spectro_augment(spec, max_mask_pct=0.1, n_freq_masks=2, n_time_masks=2):
         _, n_mels, n_steps = spec.shape
-        mask_value = spec.mean()
-        aug_spec = spec
+        mask = spec.mean()
 
-        freq_mask_param = max_mask_pct * n_mels
+        freq_mask = max_mask_pct * n_mels
         for _ in range(n_freq_masks):
-            aug_spec = transforms.FrequencyMasking(freq_mask_param)(aug_spec, mask_value)
+            spec = transforms.FrequencyMasking(freq_mask)(spec, mask)
 
-        time_mask_param = max_mask_pct * n_steps
+        time_mask = max_mask_pct * n_steps
         for _ in range(n_time_masks):
-            aug_spec = transforms.TimeMasking(time_mask_param)(aug_spec, mask_value)
+            spec = transforms.TimeMasking(time_mask)(spec, mask)
 
-        return aug_spec
+        return spec
+
+print("A")
+z = []
+for i in df.filename:
+    z.append(AudioUtil.pad_trunc(AudioUtil.open(i))[0].shape[1])
+    spectro = AudioUtil.spectro_augment(AudioUtil.spectrogram(AudioUtil.time_shift(AudioUtil.open(i))))
+    print(spectro, type(spectro))
+    exit()
+
+a = sorted(list(set(z)))
+print(a)
+exit()
+
+def plot_waveform(waveform, sample_rate, title="Waveform", xlim=None, ylim=None):
+    waveform = waveform.numpy()
+
+    num_channels, num_frames = waveform.shape
+    time_axis = torch.arange(0, num_frames) / sample_rate
+
+    figure, axes = plt.subplots(num_channels, 1)
+    if num_channels == 1:
+        axes = [axes]
+    for c in range(num_channels):
+        axes[c].plot(time_axis, waveform[c], linewidth=1)
+        axes[c].grid(True)
+        if num_channels > 1:
+            axes[c].set_ylabel(f'Channel {c+1}')
+        if xlim:
+            axes[c].set_xlim(xlim)
+        if ylim:
+            axes[c].set_ylim(ylim)
+    figure.suptitle(title)
+    plt.show(block=False)
+
+def plot_specgram(waveform, sample_rate, title="Spectrogram", xlim=None):
+    waveform = waveform.numpy()
+
+    num_channels, num_frames = waveform.shape
+    time_axis = torch.arange(0, num_frames) / sample_rate
+
+    figure, axes = plt.subplots(num_channels, 1)
+    if num_channels == 1:
+        axes = [axes]
+    for c in range(num_channels):
+        axes[c].specgram(waveform[c], Fs=sample_rate)
+        if num_channels > 1:
+            axes[c].set_ylabel(f'Channel {c+1}')
+        if xlim:
+            axes[c].set_xlim(xlim)
+    figure.suptitle(title)
+    plt.show(block=False)
+
+
+waveform, sr = AudioUtil.open(df.filename[0])
+plot_waveform(waveform, sr)
+plot_specgram(waveform, sr)
+exit()
 
 
 # Sound Dataset
 class SoundDS(Dataset):
     def __init__(self, df):
         self.df = df
-        self.duration = 4000
-        self.sr = 44100
-        self.channel = 2
-        self.shift_pct = 0.4
 
     # ----------------------------
     # Number of items in dataset
@@ -163,23 +220,16 @@ class SoundDS(Dataset):
         # Get the Class ID
         class_id = self.df.loc[idx, 'class']
 
-        aud = AudioUtil.open(audio_file)
-        # Some sounds have a higher sample rate, or fewer channels compared to the
-        # majority. So make all sounds have the same number of channels and same
-        # sample rate. Unless the sample rate is the same, the pad_trunc will still
-        # result in arrays of different lengths, even though the sound duration is
-        # the same.
-        reaud = AudioUtil.resample(aud, self.sr)
-        rechan = AudioUtil.rechannel(reaud, self.channel)
+        # reaud = AudioUtil.resample(aud, self.sr)
+        # rechan = AudioUtil.rechannel(reaud)
 
-        dur_aud = AudioUtil.pad_trunc(rechan, self.duration)
-        shift_aud = AudioUtil.time_shift(dur_aud, self.shift_pct)
-        sgram = AudioUtil.spectro_gram(shift_aud, n_mels=64, n_fft=1024, hop_len=None)
-        aug_sgram = AudioUtil.spectro_augment(sgram, max_mask_pct=0.1, n_freq_masks=2, n_time_masks=2)
+        audio_file = AudioUtil.open(audio_file)
+        audio_file = AudioUtil.pad_trunc(audio_file)
+        audio_file = AudioUtil.time_shift(audio_file)
+        spectrogram = AudioUtil.spectrogram(audio_file)
+        spectrogram = AudioUtil.spectro_augment(spectrogram)
 
-        return aug_sgram, class_id
-
-from torch.utils.data import random_split
+        return spectrogram, class_id
 
 myds = SoundDS(df)
 
@@ -332,5 +382,5 @@ def training(model, train_dl, num_epochs):
     print('Finished Training')
 
 
-num_epochs = 2
-training(myModel, train_dl, num_epochs)
+# num_epochs = 2
+# training(myModel, train_dl, num_epochs)
