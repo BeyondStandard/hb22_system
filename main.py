@@ -1,3 +1,11 @@
+# Unsolvable
+# TODO: Picklesharing between environments
+# TODO: GPU
+# TODO: Data sharing
+
+# TODO: Logging
+# TODO: Spectrography
+
 # noinspection PyUnresolvedReferences
 from torchaudio import transforms, load
 from torch.utils.data import DataLoader, Dataset, random_split
@@ -24,64 +32,54 @@ training_data = concat([
 ], ignore_index=True)
 
 
-class AudioUtil:
+# Audio datapoint
+class Audio:
 
     # Load an audio file. Return the signal as a tensor and the sample rate
-    @staticmethod
-    def open(audio_file: Path) -> AudioFile:
-        # noinspection PyUnresolvedReferences
-        signal, sample_rate = load(audio_file)
-        return signal, sample_rate
+    def __init__(self, filepath: Path) -> NoReturn:
+        self.signal, self.sample_rate = load(filepath)
 
     # Convert the given audio to the desired number of channels
-    @staticmethod
-    def rechannel(aud: AudioFile, new_channel_count: int = 2) -> AudioFile:
-        signal, sample_rate = aud
+    def rechannel(self, new_channel_count: int = 2) -> None:
 
         # Nothing to do
-        if signal.shape[0] == new_channel_count:
-            return aud
+        if self.signal.shape[0] == new_channel_count:
+            return
 
         # Convert from stereo to mono by selecting only the first channel
         if new_channel_count == 1:
-            resig = signal[:1, :]
+            self.signal = self.signal[:1, :]
 
         # Convert from mono to stereo by duplicating the first channel
         else:
-            resig = cat([signal, signal])
-
-        return resig, sample_rate
+            self.signal = cat([self.signal, self.signal])
 
     # Since Resample applies to a single channel, we resample one at a time
-    @staticmethod
-    def resample(aud: AudioFile, new_rate: int = 44100) -> AudioFile:
-        signal, sample_rate = aud
-        num_channels = signal.shape[0]
+    def resample(self, new_rate: int = 44100) -> None:
+        num_channels = self.signal.shape[0]
 
         # Nothing to do
-        if sample_rate == new_rate:
-            return aud
+        if self.sample_rate == new_rate:
+            return
 
         # Resample first channel
-        resig = transforms.Resample(sample_rate, new_rate)(signal[:1, :])
+        f_resample = transforms.Resample(self.sample_rate, new_rate)
+        self.signal = f_resample(self.signal[:1, :])
 
         # Resample the second channel and merge both channels
         if num_channels > 1:
-            retwo = transforms.Resample(sample_rate, new_rate)(signal[1:, :])
-            resig = cat([resig, retwo])
-
-        return resig, new_rate
+            f_resample = transforms.Resample(self.sample_rate, new_rate)
+            retwo = f_resample(self.signal[1:, :])
+            self.signal = cat([self.signal, retwo])
 
     # Pad (or truncate) the signal to a fixed length 'max_ms' in milliseconds
-    @staticmethod
-    def pad_trunc(aud: AudioFile, max_ms: int = 3000) -> AudioFile:
-        signal, sample_rate = aud
-        num_rows, sig_len = signal.shape
-        max_len = sample_rate // 1000 * max_ms
+    def pad_trunc(self, max_ms: int = 3000) -> None:
+        num_rows, sig_len = self.signal.shape
+        max_len = self.sample_rate // 1000 * max_ms
 
         # Truncate the signal to the given length
         if sig_len > max_len:
-            signal = signal[:, :max_len]
+            self.signal = self.signal[:, :max_len]
 
         # Length of padding to add at the beginning and end of the signal
         elif sig_len < max_len:
@@ -89,34 +87,26 @@ class AudioUtil:
             pad_end_len = max_len - sig_len - pad_begin_len
             pad_begin = torch.zeros((num_rows, pad_begin_len))
             pad_end = torch.zeros((num_rows, pad_end_len))
-            signal = cat((pad_begin, signal, pad_end), 1)
-
-        return signal, sample_rate
+            self.signal = cat((pad_begin, self.signal, pad_end), 1)
 
     # Shifts the signal to the left or right by some percent. Values at the end
     # are 'wrapped around' to the start of the transformed signal.
-    @staticmethod
-    def time_shift(aud: AudioFile, shift_limit: float = 0.4) -> AudioFile:
-        signal, sample_rate = aud
-        _, sig_len = signal.shape
+    def time_shift(self, shift_limit: float = 0.4) -> None:
+        _, sig_len = self.signal.shape
         shift_amt = int(random() * shift_limit * sig_len)
-
-        # noinspection PyArgumentList
-        return signal.roll(shift_amt), sample_rate
+        self.signal = self.signal.roll(shift_amt)
 
     # Generate a Spectrogram
-    @staticmethod
-    def spectrogram(aud, n_mels=64, n_fft=1024, hop_len=None) -> Tensor:
-        signal, signal_rate = aud
+    def spectrogram_gen(self, n_mels=64, n_fft=1024, hop_len=None) -> Tensor:
 
         # spec has shape [channel, n_mels, time]
         # where channel is mono, stereo etc
         spec = transforms.MelSpectrogram(
-            signal_rate,
+            self.sample_rate,
             n_fft=n_fft,
             hop_length=hop_len,
             n_mels=n_mels
-        )(signal)
+        )(self.signal)
 
         # Convert to decibels
         return transforms.AmplitudeToDB(top_db=80)(spec)
@@ -140,6 +130,119 @@ class AudioUtil:
 
         return spec
 
+    # Preprocessing of an audio file
+    def preprocess(self) -> Tensor:
+        self.resample()
+        self.rechannel()
+        self.pad_trunc()
+        self.time_shift()
+        return Audio.spectro_augment(self.spectrogram_gen())
+
+
+# Machine-learning Model
+class Model:
+
+    # Model constants
+    TRAINING_SET = 0.8
+    EVALUATION_SET = 0.2
+    BATCH_SIZE = 16
+    EPOCH_COUNT = 10
+
+    def __init__(self) -> NoReturn:
+        self.model = None
+
+    # Model initialization through retraining
+    def initialize_training(self) -> None:
+        my_dataset = SoundDS(training_data)
+
+        # Random split of 80:20 between training and validation
+        num_items = len(my_dataset)
+        num_train = round(num_items * Model.TRAINING_SET)
+        num_val = num_items - num_train
+        train_ds, val_ds = random_split(my_dataset, [num_train, num_val])
+
+        # Create training and validation data loaders
+        train_dataloader = DataLoader(train_ds, Model.BATCH_SIZE, shuffle=True)
+        val_dataloader = DataLoader(val_ds, Model.BATCH_SIZE, shuffle=False)
+
+        # Create the model and put it on the GPU if available
+        self.model = AudioClassifier()
+        self.model = self.model.to(DEVICE)
+        self.training(train_dataloader)
+        inference(self.model, val_dataloader)
+
+    # Model initialization from a pre-trained file
+    def initialize_from_file(self, filename: str) -> None:
+        self.model = torch.load(f'Models/{filename}.pt')
+
+    # Model exporting to a pickle file
+    def store_to_file(self, filename: str) -> None:
+        torch.save(self.model, f'Models/{filename}.pt')
+
+    # Training Loop
+    def training(self, train_dl: DataLoader) -> None:
+
+        # Loss Function, Optimizer and Scheduler
+        criterion = nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+
+        # noinspection PyUnresolvedReferences
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=0.001,
+            steps_per_epoch=int(len(train_dl)),
+            epochs=Model.EPOCH_COUNT,
+            anneal_strategy='linear'
+        )
+
+        # Repeat for each epoch
+        for epoch in range(Model.EPOCH_COUNT):
+            running_loss = 0.0
+            correct_prediction = 0
+            total_prediction = 0
+
+            # Repeat for each batch in the training set
+            for i, data in enumerate(train_dl):
+                # Get the input features and target labels, and put them on GPU
+                inputs, labels = data[0].to(DEVICE), data[1].to(DEVICE)
+
+                # Normalize the inputs
+                inputs_m, inputs_s = inputs.mean(), inputs.std()
+                inputs = (inputs - inputs_m) / inputs_s
+
+                # Zero the parameter gradients
+                optimizer.zero_grad()
+
+                # forward + backward + optimize
+                outputs = self.model(inputs)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+                scheduler.step()
+
+                # Keep stats for Loss and Accuracy
+                running_loss += loss.item()
+
+                # Get the predicted class with the highest score
+                _, prediction = torch.max(outputs, 1)
+
+                # Count of predictions that matched the target label
+                # noinspection PyUnresolvedReferences
+                correct_prediction += (prediction == labels).sum().item()
+                total_prediction += prediction.shape[0]
+
+                # if i % 10 == 0:    # print every 10 mini-batches
+                #    print('[%d, %5d] loss: %.3f' %
+                #       (epoch + 1, i + 1, running_loss / 10))
+
+            # Print stats at the end of the epoch
+            num_batches = len(train_dl)
+            avg_loss = running_loss / num_batches
+            acc = correct_prediction / total_prediction
+            print(f'Epoch: {epoch}, Loss: {avg_loss:.2f}, Accuracy: {acc:.2f}')
+
+        print('Finished Training')
+
 
 # Sound Dataset
 class SoundDS(Dataset):
@@ -156,16 +259,7 @@ class SoundDS(Dataset):
         audio_file = self.df.iloc[idx, 0]
         class_id = self.df.iloc[idx, 1]
 
-        # audio_file = AudioUtil.resample(audio_file)
-        # audio_file = AudioUtil.rechannel(audio_file)
-
-        audio_file = AudioUtil.open(audio_file)
-        audio_file = AudioUtil.pad_trunc(audio_file)
-        audio_file = AudioUtil.time_shift(audio_file)
-        spectrogram = AudioUtil.spectrogram(audio_file)
-        spectrogram = AudioUtil.spectro_augment(spectrogram)
-
-        return spectrogram, class_id
+        return Audio(audio_file).preprocess(), class_id
 
 
 # Audio Classification Model
@@ -262,18 +356,6 @@ def inference(model: AudioClassifier, val_dl: DataLoader):
     print(f'Accuracy: {acc:.2f}, Total items: {total_prediction}')
 
 
-# Preprocess
-def preprocess(path: Path) -> Tensor:
-    audio_file = AudioUtil.open(path)
-    audio_file = AudioUtil.resample(audio_file)
-    audio_file = AudioUtil.rechannel(audio_file)
-    audio_file = AudioUtil.pad_trunc(audio_file)
-    audio_file = AudioUtil.time_shift(audio_file)
-    audio_file = AudioUtil.spectrogram(audio_file)
-    audio_file = AudioUtil.spectro_augment(audio_file)
-    return audio_file.unsqueeze(0)
-
-
 # Classify
 def classify(model: AudioClassifier, data: Tensor) -> int:
     with torch.no_grad():
@@ -288,111 +370,6 @@ def classify(model: AudioClassifier, data: Tensor) -> int:
 
         _, prediction = torch.max(output, 1)
         return prediction
-
-
-# Machine-learning Model
-class Model:
-
-    # Model constants
-    TRAINING_SET = 0.8
-    EVALUATION_SET = 0.2
-    BATCH_SIZE = 16
-    EPOCH_COUNT = 10
-
-    def __init__(self) -> NoReturn:
-        self.model = None
-
-    # Model initialization through retraining
-    def initialize_training(self) -> None:
-        my_dataset = SoundDS(training_data)
-
-        # Random split of 80:20 between training and validation
-        num_items = len(my_dataset)
-        num_train = round(num_items * Model.TRAINING_SET)
-        num_val = num_items - num_train
-        train_ds, val_ds = random_split(my_dataset, [num_train, num_val])
-
-        # Create training and validation data loaders
-        train_dataloader = DataLoader(train_ds, Model.BATCH_SIZE, shuffle=True)
-        val_dataloader = DataLoader(val_ds, Model.BATCH_SIZE, shuffle=False)
-
-        # Create the model and put it on the GPU if available
-        self.model = AudioClassifier()
-        self.model = self.model.to(DEVICE)
-        self.training(train_dataloader)
-        inference(self.model, val_dataloader)
-
-    # Model initialization from a pre-trained file
-    def initialize_from_file(self, filename: str) -> None:
-        self.model = torch.load(f'Models/{filename}.pt')
-
-    # Model exporting to a pickle file
-    def store_to_file(self, filename: str) -> None:
-        torch.save(self.model, f'Models/{filename}.pt')
-
-    # Training Loop
-    def training(self, train_dl: DataLoader):
-
-        # Loss Function, Optimizer and Scheduler
-        criterion = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
-
-        # noinspection PyUnresolvedReferences
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            optimizer,
-            max_lr=0.001,
-            steps_per_epoch=int(len(train_dl)),
-            epochs=num_epochs,
-            anneal_strategy='linear'
-        )
-
-        # Repeat for each epoch
-        for epoch in range(Model.EPOCH_COUNT):
-            running_loss = 0.0
-            correct_prediction = 0
-            total_prediction = 0
-
-            # Repeat for each batch in the training set
-            for i, data in enumerate(train_dl):
-                # Get the input features and target labels, and put them on GPU
-                inputs, labels = data[0].to(DEVICE), data[1].to(DEVICE)
-
-                # Normalize the inputs
-                inputs_m, inputs_s = inputs.mean(), inputs.std()
-                inputs = (inputs - inputs_m) / inputs_s
-
-                # Zero the parameter gradients
-                optimizer.zero_grad()
-
-                # forward + backward + optimize
-                outputs = self.model(inputs)
-                loss = criterion(outputs, labels)
-                loss.backward()
-                optimizer.step()
-                scheduler.step()
-
-                # Keep stats for Loss and Accuracy
-                running_loss += loss.item()
-
-                # Get the predicted class with the highest score
-                _, prediction = torch.max(outputs, 1)
-
-                # Count of predictions that matched the target label
-                # noinspection PyUnresolvedReferences
-                correct_prediction += (prediction == labels).sum().item()
-                total_prediction += prediction.shape[0]
-
-                # if i % 10 == 0:    # print every 10 mini-batches
-                #    print('[%d, %5d] loss: %.3f' %
-                #       (epoch + 1, i + 1, running_loss / 10))
-
-            # Print stats at the end of the epoch
-            num_batches = len(train_dl)
-            avg_loss = running_loss / num_batches
-            acc = correct_prediction / total_prediction
-            print(f'Epoch: {epoch}, Loss: {avg_loss:.2f}, Accuracy: {acc:.2f}')
-
-        print('Finished Training')
 
 
 if __name__ == '__main__':
