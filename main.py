@@ -336,11 +336,9 @@ def classify(model: AudioClassifier, data: Tensor) -> int:
 
         # Get predictions
         output = model(inputs)
-        print(output.shape)
-        print(output)
 
-        for index, confidence in enumerate(output[0]):
-            print(index, confidence)
+        for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
+            print(f'Class {index + 1} - {(confidence.item()*100):.2f}%')
 
         _, prediction = torch.max(output, 1)
         return prediction
