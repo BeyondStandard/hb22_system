@@ -17,20 +17,6 @@ from pathlib import Path
 from torch import Tensor, cat, nn
 import torch
 
-# Hardware
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-# Typing
-AudioFile = Tuple[Tensor, int]
-
-# Dataframe initialization
-dataset_path = Path.cwd() / 'Datasets'
-col = ['filename', 'class_id']
-training_data = concat([
-    DataFrame(((file, int(index)) for file in folder.iterdir()), columns=col)
-    for index, folder in enumerate(dataset_path.iterdir())
-], ignore_index=True)
-
 
 # Audio datapoint
 class Audio:
@@ -148,12 +134,22 @@ class Model:
     BATCH_SIZE = 16
     EPOCH_COUNT = 10
 
+    DEVICE = torch.device(
+        "cuda:0" if torch.cuda.is_available() else "cpu"
+    )
+
     def __init__(self) -> NoReturn:
         self.model = None
 
     # Model initialization through retraining
     def initialize_training(self) -> None:
-        my_dataset = SoundDS(training_data)
+        dataset_path = Path.cwd() / 'Datasets'
+        col = ['filename', 'class_id']
+        my_dataset = SoundDS(concat([
+            DataFrame(((file, int(index)) for file in folder.iterdir()),
+                      columns=col)
+            for index, folder in enumerate(dataset_path.iterdir())
+        ], ignore_index=True))
 
         # Random split of 80:20 between training and validation
         num_items = len(my_dataset)
@@ -167,7 +163,7 @@ class Model:
 
         # Create the model and put it on the GPU if available
         self.model = AudioClassifier()
-        self.model = self.model.to(DEVICE)
+        self.model = self.model.to(Model.DEVICE)
         self.training(train_dataloader)
         inference(self.model, val_dataloader)
 
@@ -204,7 +200,7 @@ class Model:
             # Repeat for each batch in the training set
             for i, data in enumerate(train_dl):
                 # Get the input features and target labels, and put them on GPU
-                inputs, labels = data[0].to(DEVICE), data[1].to(DEVICE)
+                inputs, labels = data[0].to(Model.DEVICE), data[1].to(Model.DEVICE)
 
                 # Normalize the inputs
                 inputs_m, inputs_s = inputs.mean(), inputs.std()
@@ -335,7 +331,7 @@ def inference(model: AudioClassifier, val_dl: DataLoader):
     with torch.no_grad():
         for data in val_dl:
             # Get the input features and target labels, and put them on the GPU
-            inputs, labels = data[0].to(DEVICE), data[1].to(DEVICE)
+            inputs, labels = data[0].to(Model.DEVICE), data[1].to(Model.DEVICE)
 
             # Normalize the inputs
             inputs_m, inputs_s = inputs.mean(), inputs.std()
@@ -359,7 +355,7 @@ def inference(model: AudioClassifier, val_dl: DataLoader):
 # Classify
 def classify(model: AudioClassifier, data: Tensor) -> int:
     with torch.no_grad():
-        inputs = data.to(DEVICE)
+        inputs = data.to(Model.DEVICE)
         inputs_m, inputs_s = inputs.mean(), inputs.std()
         inputs = (inputs - inputs_m) / inputs_s
 
