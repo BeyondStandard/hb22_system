@@ -244,12 +244,15 @@ class Model:
         print('Finished Training')
 
     # Classify single audio files
-    def classify(self, spec: Tensor, unsqueeze: bool = False):
+    def classify(self, spectro: Spectrography, unsqueeze: bool = False):
         if unsqueeze:
-            spec = spec.unsqueeze(0)
+            data = spectro.get_spectrography().unsqueeze(0)
+
+        else:
+            data = spectro.get_spectrography()
 
         with torch.no_grad():
-            inputs = spec.to(Model.DEVICE)
+            inputs = data.to(Model.DEVICE)
             inputs_m, inputs_s = inputs.mean(), inputs.std()
             inputs = (inputs - inputs_m) / inputs_s
 
