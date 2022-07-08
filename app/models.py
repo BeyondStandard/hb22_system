@@ -6,6 +6,8 @@ class Audio(Base):
     __tablename__ = 'audio'
 
     id = Column(Integer, primary_key=True, index=True)
-    audio_encoded = Column(String)
+    car_type = Column(String)
+    probability = Column(String)
     file_name = Column(String)
+    audio_encoded = Column(String)
     

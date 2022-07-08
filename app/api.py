@@ -5,14 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 from crud import create_audio, get_latest_audio
 from crud import get_audios, create_audio
-from mock import mock_audio
 from schemas import Audio as AudioSchema
+from schemas import Classifier
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base
 import sys
 sys.path.insert(1, './../')
 
-from main import Audio
+from main import Audio, Spectrography, Model
 
 Base.metadata.create_all(bind=engine)
 
@@ -43,9 +43,6 @@ def read_root():
 
 @app.get("/latest", response_model=AudioSchema)
 def get_latest( db: Session = Depends(get_db)):
-    new = Audio.base64_to_filepath("SGVsbG8gdGhlcmU=")
-    print(new)
-
     return get_latest_audio(db)
 
 
@@ -55,6 +52,20 @@ def get_audio(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return audios
 
 @app.post("/ingest", response_model=AudioSchema)
-async def ingest_audio_b64(audio: AudioSchema, db: Session = Depends(get_db)):
+async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
+    
+    #new_audio = Audio(Audio.base64_to_filepath)
+    #new_audio.preprocess()
+    #s = Spectrography(new_audio)
+    #s.spectro_augment()
+    #model = Model()
 
-    return create_audio(db, audio)
+    #model.initialize_from_file("./../Models/cloud_model_1.pt", api=False)
+    #result = model.classify(s, unsqueeze = True)
+
+    classifier= {
+        "probability": "25%",
+        "car_type": "jeep"
+    }
+
+    return create_audio(db, schema, classifier)
