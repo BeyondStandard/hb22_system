@@ -106,6 +106,7 @@ class Spectrography:
 
         # Convert to decibels
         self.spec = transforms.AmplitudeToDB(top_db=80)(self.spec)
+        self.channel, self.mels, self.steps = self.spec.shape
 
     # Returns the spectrography Tensor
     def get_spectrography(self) -> Tensor:
@@ -116,14 +117,13 @@ class Spectrography:
     # (vertical bars) to prevent overfitting and to help the model generalise
     # better. The masked sections are replaced with the mean value.
     def spectro_augment(self, max_mask_pct=0.1, n_freq_masks=2, n_time_masks=2):
-        _, mels, steps = self.spec
         mask = self.spec.mean()
 
-        freq_mask = max_mask_pct * mels
+        freq_mask = max_mask_pct * self.mels
         for _ in range(n_freq_masks):
             self.spec = transforms.FrequencyMasking(freq_mask)(self.spec, mask)
 
-        time_mask = max_mask_pct * steps
+        time_mask = max_mask_pct * self.steps
         for _ in range(n_time_masks):
             self.spec = transforms.TimeMasking(time_mask)(self.spec, mask)
 
