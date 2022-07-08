@@ -229,39 +229,21 @@ class AudioClassifier(nn.Module):
         return x
 
 
-# Initialization
-my_dataset = SoundDS(training_data)
-
-# Random split of 80:20 between training and validation
-num_items = len(my_dataset)
-num_train = round(num_items * 0.8)
-num_val = num_items - num_train
-train_ds, val_ds = random_split(my_dataset, [num_train, num_val])
-
-# Create training and validation data loaders
-train_dl = DataLoader(train_ds, batch_size=16, shuffle=True)
-val_dl = DataLoader(val_ds, batch_size=16, shuffle=False)
-
-# Create the model and put it on the GPU if available
-myModel = AudioClassifier()
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-myModel = myModel.to(device)
-
-# Check that it is on Cuda
-print(next(myModel.parameters()).device)
-
-
-# ----------------------------
 # Training Loop
-# ----------------------------
-def training(model, train_dl, num_epochs):
+def training(model: AudioClassifier, train_dl: DataLoader, num_epochs: int):
+
     # Loss Function, Optimizer and Scheduler
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.001,
-                                                    steps_per_epoch=int(len(train_dl)),
-                                                    epochs=num_epochs,
-                                                    anneal_strategy='linear')
+
+    # noinspection PyUnresolvedReferences
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=0.001,
+        steps_per_epoch=int(len(train_dl)),
+        epochs=num_epochs,
+        anneal_strategy='linear'
+    )
 
     # Repeat for each epoch
     for epoch in range(num_epochs):
@@ -293,12 +275,15 @@ def training(model, train_dl, num_epochs):
 
             # Get the predicted class with the highest score
             _, prediction = torch.max(outputs, 1)
+
             # Count of predictions that matched the target label
+            # noinspection PyUnresolvedReferences
             correct_prediction += (prediction == labels).sum().item()
             total_prediction += prediction.shape[0]
 
             # if i % 10 == 0:    # print every 10 mini-batches
-            #    print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, running_loss / 10))
+            #    print('[%d, %5d] loss: %.3f' %
+            #       (epoch + 1, i + 1, running_loss / 10))
 
         # Print stats at the end of the epoch
         num_batches = len(train_dl)
@@ -309,5 +294,21 @@ def training(model, train_dl, num_epochs):
     print('Finished Training')
 
 
-num_epochs = 10
-training(myModel, train_dl, num_epochs)
+# Initialization
+my_dataset = SoundDS(training_data)
+
+# Random split of 80:20 between training and validation
+num_items = len(my_dataset)
+num_train = round(num_items * 0.8)
+num_val = num_items - num_train
+train_ds, val_ds = random_split(my_dataset, [num_train, num_val])
+
+# Create training and validation data loaders
+train_dataloader = DataLoader(train_ds, batch_size=16, shuffle=True)
+val_dataloader = DataLoader(val_ds, batch_size=16, shuffle=False)
+
+# Create the model and put it on the GPU if available
+myModel = AudioClassifier()
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+myModel = myModel.to(device)
+training(myModel, train_dataloader, 10)
