@@ -54,7 +54,7 @@ def get_audio(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 @app.post("/ingest", response_model=AudioSchema)
 async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
     
-    new_audio = Audio(Audio.base64_to_filepath)
+    new_audio = Audio(Audio.base64_to_filepath(schema.audio_encoded))
     new_audio.preprocess()
     s = Spectrography(new_audio)
     s.spectro_augment()
