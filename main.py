@@ -327,12 +327,15 @@ def inference(model: AudioClassifier, val_dl: DataLoader):
 # Classify
 def classify(model: AudioClassifier, data: Tensor) -> int:
     with torch.no_grad():
+        print(data.shape)
         inputs = data.to(device)
-
+        print(inputs.shape)
         # Get predictions
         output = model(inputs)
+        print(output.shape)
+        print(output)
 
-        for index, confidence in enumerate(output[0]):
+        for index, confidence in enumerate(output[1]):
             print(index, confidence)
 
         _, prediction = torch.max(output, 1)
