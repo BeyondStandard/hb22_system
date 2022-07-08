@@ -52,7 +52,7 @@ def get_audio(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     audios = get_audios(db, skip=skip, limit=limit)
     return audios
 
-@app.post("/ingest", response_model=str)
+@app.post("/ingest", response_model=AudioSchema)
 async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
     
     model = Model()
@@ -63,7 +63,5 @@ async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
         "probability": result,
         "car_type": "jeep"
     }
-
-    print(classifier)
-
+    
     return create_audio(db, schema, classifier)
