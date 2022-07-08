@@ -10,6 +10,7 @@ from schemas import Classifier
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base
 import sys
+import json
 sys.path.insert(1, './../')
 
 from main import Audio, Spectrography, Model
@@ -51,7 +52,7 @@ def get_audio(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     audios = get_audios(db, skip=skip, limit=limit)
     return audios
 
-@app.post("/ingest", response_model=AudioSchema)
+@app.post("/ingest", response_model=str)
 async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
     
     model = Model()
@@ -59,7 +60,7 @@ async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
     result = model.server_process(schema.audio_encoded)
 
     classifier= {
-        "probability": result,
+        "probability": json.loads(to_json(i) for i in result),
         "car_type": "jeep"
     }
 

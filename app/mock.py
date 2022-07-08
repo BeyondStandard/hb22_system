@@ -1,4 +1,9 @@
 import base64
 
+
 def mock_audio():
-    return base64.b64encode("./../record_05_34_54.wav").read()
+
+    result =  base64.b64encode("./../record_05_34_54.wav")
+    print(result.encode('ascii'))
+    
+    #return result.decode("utf-8")
