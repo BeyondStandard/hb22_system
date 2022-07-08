@@ -1,21 +1,22 @@
 # Unsolvable
 # TODO: Picklesharing between environments
-# TODO: GPU
 # TODO: Data sharing
 
 # TODO: Logging
-# TODO: Spectrography
 
 # noinspection PyUnresolvedReferences
 from torchaudio import transforms, load
 from torch.utils.data import DataLoader, Dataset, random_split
 
 from matplotlib.pyplot import subplots, show
+from tempfile import NamedTemporaryFile
 from pandas import DataFrame, concat
 from typing import Tuple, NoReturn
 from random import random, randint
 from pathlib import Path
+from base64 import b64decode
 from torch import Tensor, cat, nn
+from os import unlink
 import torch
 
 
@@ -25,6 +26,18 @@ class Audio:
     # Load an audio file. Return the signal as a tensor and the sample rate
     def __init__(self, filepath: Path) -> NoReturn:
         self.signal, self.sample_rate = load(filepath)
+
+    # Base64 decoder
+    @staticmethod
+    def base64_to_filepath(base64_str: str) -> Path:
+        tf = NamedTemporaryFile(delete=False)
+
+        with open(tf.name, "wb") as wav_file:
+            wav_file.write(b64decode(base64_str))
+
+        return Path(tf.name)
+        # AFTER USING THE PATH TO CREATE AUDIO FILE:
+        # unlink(Path)!!!
 
     # Convert the given audio to the desired number of channels
     def rechannel(self, new_channel_count: int = 2) -> None:
