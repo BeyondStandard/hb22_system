@@ -406,7 +406,7 @@ class Model:
         output['Waveform'] = wav_audio.plot_waveform().decode('ascii')
         output['Spectrograph'] = wav_audio.plot_spectrogram().decode('ascii')
 
-        return dumps(output)
+        return output
 
 
 # Sound Dataset
