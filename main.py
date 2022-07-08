@@ -391,7 +391,7 @@ class Model:
             output_dict['winner_label'] = Model.CLASSES[prediction.item()]
             output_dict['winner_confidence'] = confidence.item()
             
-            print(output_dict)
+            print(output_dict, flush=True)
             return output_dict
 
     # Helper function for the server work
