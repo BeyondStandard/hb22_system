@@ -208,7 +208,7 @@ class AudioClassifier(nn.Module):
 
         # Linear Classifier
         self.ap = nn.AdaptiveAvgPool2d(output_size=1)
-        self.lin = nn.Linear(in_features=64, out_features=10)
+        self.lin = nn.Linear(in_features=64, out_features=8)
 
         # Wrap the Convolutional Blocks
         self.conv = nn.Sequential(*conv_layers)
@@ -331,15 +331,12 @@ def classify(model: AudioClassifier, data: Tensor) -> int:
 
         # Get predictions
         output = model(inputs)
-        return output
 
-        # Get the predicted class with the highest score
-        _, prediction = torch.max(outputs, 1)
+        for index, confidence in enumerate(output[0]):
+            print(index, confidence)
 
-        # Count of predictions that matched the target label
-        # noinspection PyUnresolvedReferences
-        correct_prediction += (prediction == labels).sum().item()
-        total_prediction += prediction.shape[0]
+        _, prediction = torch.max(output, 1)
+        return prediction
 
 
 # Initialization
@@ -361,4 +358,3 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 myModel = myModel.to(device)
 training(myModel, train_dataloader, 10)
 inference(myModel, val_dataloader)
-
