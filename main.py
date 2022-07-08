@@ -493,5 +493,7 @@ class AudioClassifier(nn.Module):
         return x
 
 
-if __name__ == '__main__':
-    model = Model()
+model = Model()
+m = torch.load(f'Models/cloud_model_1.pt')
+model.initialize_from_file('cloud_model_1')
+torch.save(model, f'Models/cloud_model_2.pt')
