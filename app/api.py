@@ -64,4 +64,6 @@ async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
         "car_type": "jeep"
     }
 
-    return create_audio(db, schema, classifier)
+    returnvalue =  create_audio(db, schema, classifier)
+    print(returnvalue.probability)
+    return returnvalue
