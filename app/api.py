@@ -60,7 +60,7 @@ async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
     result = model.server_process(schema.audio_encoded)
 
     classifier= {
-        "probability": json.dumps(result),
+        "probability": result,
         "car_type": "jeep"
     }
 
