@@ -214,7 +214,7 @@ class Model:
         self.model = AudioClassifier()
         self.model = self.model.to(Model.DEVICE)
         self.training(train_dataloader)
-        inference(self.model, val_dataloader)
+        self.inference(val_dataloader)
 
     # Model initialization from a pre-trained file
     def initialize_from_file(self, filename: str) -> None:
@@ -288,6 +288,36 @@ class Model:
             print(f'Epoch: {epoch}, Loss: {avg_loss:.2f}, Accuracy: {acc:.2f}')
 
         print('Finished Training')
+
+    # Inference
+    def inference(self, val_dl: DataLoader) -> None:
+        correct_prediction = 0
+        total_prediction = 0
+
+        # Disable gradient updates
+        with torch.no_grad():
+            for data in val_dl:
+                # Get the input features and target labels, and put them on GPU
+                inputs, labels = data[0].to(Model.DEVICE), data[1].to(
+                    Model.DEVICE)
+
+                # Normalize the inputs
+                inputs_m, inputs_s = inputs.mean(), inputs.std()
+                inputs = (inputs - inputs_m) / inputs_s
+
+                # Get predictions
+                outputs = self.model(inputs)
+
+                # Get the predicted class with the highest score
+                _, prediction = torch.max(outputs, 1)
+
+                # Count of predictions that matched the target label
+                # noinspection PyUnresolvedReferences
+                correct_prediction += (prediction == labels).sum().item()
+                total_prediction += prediction.shape[0]
+
+        acc = correct_prediction / total_prediction
+        print(f'Accuracy: {acc:.2f}, Total items: {total_prediction}')
 
     # Classify single audio files
     def classify(self, spectro: Spectrography, unsqueeze: bool = False):
@@ -396,36 +426,6 @@ class AudioClassifier(nn.Module):
 
         # Final output
         return x
-
-
-# Inference
-def inference(model: AudioClassifier, val_dl: DataLoader):
-    correct_prediction = 0
-    total_prediction = 0
-
-    # Disable gradient updates
-    with torch.no_grad():
-        for data in val_dl:
-            # Get the input features and target labels, and put them on the GPU
-            inputs, labels = data[0].to(Model.DEVICE), data[1].to(Model.DEVICE)
-
-            # Normalize the inputs
-            inputs_m, inputs_s = inputs.mean(), inputs.std()
-            inputs = (inputs - inputs_m) / inputs_s
-
-            # Get predictions
-            outputs = model(inputs)
-
-            # Get the predicted class with the highest score
-            _, prediction = torch.max(outputs, 1)
-
-            # Count of predictions that matched the target label
-            # noinspection PyUnresolvedReferences
-            correct_prediction += (prediction == labels).sum().item()
-            total_prediction += prediction.shape[0]
-
-    acc = correct_prediction / total_prediction
-    print(f'Accuracy: {acc:.2f}, Total items: {total_prediction}')
 
 
 if __name__ == '__main__':
