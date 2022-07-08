@@ -8,14 +8,16 @@
 from torchaudio import transforms, load, save
 from torch.utils.data import DataLoader, Dataset, random_split
 
-from matplotlib.pyplot import subplots, show
+from matplotlib.pyplot import subplots, show, savefig
 from tempfile import NamedTemporaryFile
+from base64 import b64encode, b64decode
 from pandas import DataFrame, concat
 from typing import Tuple, NoReturn
 from random import random, randint
-from pathlib import Path
-from base64 import b64decode
 from torch import Tensor, cat, nn
+from pathlib import Path
+from json import dumps
+from io import BytesIO
 from os import unlink
 import torch
 
@@ -117,7 +119,7 @@ class Audio:
         self.time_shift()
 
     # Waveform visualization
-    def plot_waveform(self) -> None:
+    def plot_waveform(self, display: bool = False) -> bytes:
         waveform = self.signal.numpy()
         num_channels, num_frames = waveform.shape
         time_axis = torch.arange(0, num_frames) / self.sample_rate
@@ -131,10 +133,18 @@ class Audio:
             if num_channels > 1:
                 axes[c].set_ylabel(f'Channel {c + 1}')
         figure.suptitle("Waveform")
-        show(block=False)
+
+        if display:
+            show(block=False)
+
+        string_iobytes = BytesIO()
+        savefig(string_iobytes, format='jpg')
+        string_iobytes.seek(0)
+
+        return b64encode(string_iobytes.read())
 
     # Spectrogram visualization
-    def plot_spectrogram(self) -> None:
+    def plot_spectrogram(self, display: bool = False) -> bytes:
         waveform = self.signal.numpy()
         num_channels, num_frames = waveform.shape
 
@@ -146,7 +156,15 @@ class Audio:
             if num_channels > 1:
                 axes[c].set_ylabel(f'Channel {c + 1}')
         figure.suptitle('Spectrogram')
-        show(block=False)
+
+        if display:
+            show(block=False)
+
+        string_iobytes = BytesIO()
+        savefig(string_iobytes, format='jpg')
+        string_iobytes.seek(0)
+
+        return b64encode(string_iobytes.read())
 
 
 # Spectrography datapoint
@@ -196,6 +214,7 @@ class Model:
     BATCH_SIZE = 16
     EPOCH_COUNT = 10
 
+    CLASSES = {}
     DEVICE = torch.device(
         "cuda:0" if torch.cuda.is_available() else "cpu"
     )
@@ -207,11 +226,14 @@ class Model:
     def initialize_training(self) -> None:
         dataset_path = Path.cwd() / 'Datasets'
         col = ['filename', 'class_id']
-        my_dataset = SoundDS(concat([
-            DataFrame(((file, int(index)) for file in folder.iterdir()),
-                      columns=col)
-            for index, folder in enumerate(dataset_path.iterdir())
-        ], ignore_index=True))
+
+        dataframes = []
+        for index, folder in enumerate(dataset_path.iterdir()):
+            d = DataFrame(((f, index) for f in folder.iterdir()), columns=col)
+            dataframes.append(d)
+            Model.CLASSES[index] = "".join(folder.stem.split()[1:])
+
+        my_dataset = SoundDS(concat(dataframes, ignore_index=True))
 
         # Random split of 80:20 between training and validation
         num_items = len(my_dataset)
@@ -311,8 +333,8 @@ class Model:
         with torch.no_grad():
             for data in val_dl:
                 # Get the input features and target labels, and put them on GPU
-                inputs, labels = data[0].to(Model.DEVICE), data[1].to(
-                    Model.DEVICE)
+                inputs = data[0].to(Model.DEVICE)
+                labels = data[1].to(Model.DEVICE)
 
                 # Normalize the inputs
                 inputs_m, inputs_s = inputs.mean(), inputs.std()
@@ -333,7 +355,7 @@ class Model:
         print(f'Accuracy: {acc:.2f}, Total items: {total_prediction}')
 
     # Classify single audio files
-    def classify(self, spectro: Spectrography, unsqueeze: bool = False):
+    def classify(self, spectro, unsqueeze=False, normalize=True) -> dict:
         if unsqueeze:
             data = spectro.get_spectrography().unsqueeze(0)
 
@@ -342,16 +364,38 @@ class Model:
 
         with torch.no_grad():
             inputs = data.to(Model.DEVICE)
-            inputs_m, inputs_s = inputs.mean(), inputs.std()
-            inputs = (inputs - inputs_m) / inputs_s
+
+            if normalize:
+                inputs_m, inputs_s = inputs.mean(), inputs.std()
+                inputs = (inputs - inputs_m) / inputs_s
 
             # Get predictions
             output = self.model(inputs)
-            for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
-                print(f'Class {index + 1} - {(confidence.item()*100):.2f}%')
+            output_dict = {'confidence': {}}
 
-            _, prediction = torch.max(output, 1)
-            return prediction
+            for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
+                output_dict['confidence'][index] = confidence
+
+            confidence, prediction = torch.max(output[0], 1)
+            output_dict['winner_index'] = prediction
+            output_dict['winner_label'] = Model.CLASSES[prediction]
+            output_dict['winner_confidence'] = confidence
+
+            return output_dict
+
+    # Helper function for the server work
+    def server_process(self, base64_wav: str) -> str:
+        wav_path = Audio.base64_to_filepath(base64_wav)
+        wav_audio = Audio(wav_path)
+        wav_audio.preprocess()
+        wav_spectro = Spectrography(wav_audio)
+        wav_spectro.spectro_augment()
+        unlink(wav_path)
+
+        output = self.classify(wav_spectro)
+        output['Waveform'] = wav_audio.plot_waveform().decode('ascii')
+        output['Spectrograph'] = wav_audio.plot_spectrogram().decode('ascii')
+        return dumps(output)
 
 
 # Sound Dataset
