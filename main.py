@@ -5,7 +5,7 @@
 # TODO: Logging
 
 # noinspection PyUnresolvedReferences
-from torchaudio import transforms, load
+from torchaudio import transforms, load, save
 from torch.utils.data import DataLoader, Dataset, random_split
 
 from matplotlib.pyplot import subplots, show
@@ -23,6 +23,10 @@ import torch
 # Audio datapoint
 class Audio:
 
+    LENGTH = 3
+    SAMPLE_RATE = 44100
+    SXL = LENGTH * SAMPLE_RATE
+
     # Load an audio file. Return the signal as a tensor and the sample rate
     def __init__(self, filepath: Path) -> NoReturn:
         self.signal, self.sample_rate = load(filepath)
@@ -38,6 +42,15 @@ class Audio:
         return Path(tf.name)
         # AFTER USING THE PATH TO CREATE AUDIO FILE:
         # unlink(Path)!!!
+
+    # Block audio chunk-cutter
+    def chunking(self, filepath: str) -> None:
+        overflow = int(self.signal.shape[1] % Audio.SXL / 2)
+        self.signal = self.signal[:, overflow:-overflow]
+
+        for index, chunk in enumerate(self.signal.split(Audio.SXL, dim=1)):
+            fullpath = filepath + f'\\{index}.wav'
+            save(fullpath, chunk, self.sample_rate)
 
     # Convert the given audio to the desired number of channels
     def rechannel(self, new_channel_count: int = 2) -> None:
@@ -407,7 +420,7 @@ class AudioClassifier(nn.Module):
 
         # Linear Classifier
         self.ap = nn.AdaptiveAvgPool2d(output_size=1)
-        self.lin = nn.Linear(in_features=64, out_features=8)
+        self.lin = nn.Linear(in_features=64, out_features=9)
 
         # Wrap the Convolutional Blocks
         self.conv = nn.Sequential(*conv_layers)
