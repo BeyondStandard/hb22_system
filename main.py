@@ -10,6 +10,7 @@
 from torchaudio import transforms, load
 from torch.utils.data import DataLoader, Dataset, random_split
 
+from matplotlib.pyplot import subplots, show
 from pandas import DataFrame, concat
 from typing import Tuple, NoReturn
 from random import random, randint
@@ -88,6 +89,38 @@ class Audio:
         self.rechannel()
         self.pad_trunc()
         self.time_shift()
+
+    # Waveform visualization
+    def plot_waveform(self) -> None:
+        waveform = self.signal.numpy()
+        num_channels, num_frames = waveform.shape
+        time_axis = torch.arange(0, num_frames) / self.sample_rate
+
+        figure, axes = subplots(num_channels, 1)
+        if num_channels == 1:
+            axes = [axes]
+        for c in range(num_channels):
+            axes[c].plot(time_axis, waveform[c], linewidth=1)
+            axes[c].grid(True)
+            if num_channels > 1:
+                axes[c].set_ylabel(f'Channel {c + 1}')
+        figure.suptitle("Waveform")
+        show(block=False)
+
+    # Spectrogram visualization
+    def plot_spectrogram(self) -> None:
+        waveform = self.signal.numpy()
+        num_channels, num_frames = waveform.shape
+
+        figure, axes = subplots(num_channels, 1)
+        if num_channels == 1:
+            axes = [axes]
+        for c in range(num_channels):
+            axes[c].specgram(waveform[c], Fs=self.sample_rate)
+            if num_channels > 1:
+                axes[c].set_ylabel(f'Channel {c + 1}')
+        figure.suptitle('Spectrogram')
+        show(block=False)
 
 
 # Spectrography datapoint
