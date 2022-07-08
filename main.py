@@ -178,12 +178,6 @@ def plot_specgram(waveform, sample_rate, title="Spectrogram", xlim=None):
     plt.show(block=False)
 
 
-waveform, sr = AudioUtil.open(df.filename[0])
-plot_waveform(waveform, sr)
-plot_specgram(waveform, sr)
-exit()
-
-
 # Sound Dataset
 class SoundDS(Dataset):
     def __init__(self, df):
