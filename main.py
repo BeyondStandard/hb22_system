@@ -324,11 +324,11 @@ class Model:
 
     # Model initialization from a pre-trained file
     def initialize_from_file(self, filename: str) -> None:
-        self.model = torch.load(f'Models/{filename}.at')
+        self.model = torch.load(f'Models/{filename}.pt')
 
     # Model exporting to a pickle file
     def store_to_file(self, filename: str) -> None:
-        torch.save(self.model, f'models/{filename}.pt')
+        torch.save(self.model, f'Models/{filename}.pt')
 
     # Training Loop
     def training(self, train_dl: DataLoader):
