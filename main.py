@@ -376,7 +376,7 @@ class Model:
             for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
                 output_dict['confidence'][index] = confidence
 
-            confidence, prediction = torch.max(output[0], 1)
+            confidence, prediction = torch.max(output, 1)
             output_dict['winner_index'] = prediction
             output_dict['winner_label'] = Model.CLASSES[prediction]
             output_dict['winner_confidence'] = confidence
