@@ -55,12 +55,11 @@ def get_audio(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
     
     model = Model()
-    model.initialize_from_file("./../Models/cloud_model_1.pt", True)
+    model.initialize_from_file("./../Models/trained.pt", True)
     result = model.server_process(schema.audio_encoded)
-    println(result)
 
     classifier= {
-        "probability": "25%",
+        "probability": result,
         "car_type": "jeep"
     }
 
