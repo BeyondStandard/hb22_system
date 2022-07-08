@@ -137,17 +137,6 @@ class AudioUtil:
 
         return spec
 
-print("A")
-z = []
-for i in df.filename:
-    z.append(AudioUtil.pad_trunc(AudioUtil.open(i))[0].shape[1])
-    spectro = AudioUtil.spectro_augment(AudioUtil.spectrogram(AudioUtil.time_shift(AudioUtil.open(i))))
-    print(spectro, type(spectro))
-    exit()
-
-a = sorted(list(set(z)))
-print(a)
-exit()
 
 def plot_waveform(waveform, sample_rate, title="Waveform", xlim=None, ylim=None):
     waveform = waveform.numpy()
@@ -379,5 +368,5 @@ def training(model, train_dl, num_epochs):
     print('Finished Training')
 
 
-# num_epochs = 2
-# training(myModel, train_dl, num_epochs)
+num_epochs = 2
+training(myModel, train_dl, num_epochs)
