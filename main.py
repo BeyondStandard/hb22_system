@@ -377,6 +377,7 @@ class Model:
                 output_dict['confidence'][index] = confidence
 
             confidence, prediction = torch.max(output, 1)
+            prediction = prediction.item()
             output_dict['winner_index'] = prediction
             output_dict['winner_label'] = Model.CLASSES[prediction]
             output_dict['winner_confidence'] = confidence
