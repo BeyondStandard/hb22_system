@@ -45,13 +45,19 @@ class Audio:
         # AFTER USING THE PATH TO CREATE AUDIO FILE:
         # unlink(Path)!!!
 
+    # Batch chunk-cutter
+    @staticmethod
+    def batch_chunking(original_audio: str, new_audio: str) -> None:
+        for index, audio in enumerate(Path(original_audio).iterdir()):
+            Audio(audio).chunking(new_audio, f' ({index})')
+
     # Block audio chunk-cutter
-    def chunking(self, filepath: str) -> None:
+    def chunking(self, filepath: str, filename='') -> None:
         overflow = int(self.signal.shape[1] % Audio.SXL / 2)
         self.signal = self.signal[:, overflow:-overflow]
 
         for index, chunk in enumerate(self.signal.split(Audio.SXL, dim=1)):
-            fullpath = filepath + f'\\{index}.wav'
+            fullpath = filepath + f'\\{index}{filename}.wav'
             save(fullpath, chunk, self.sample_rate)
 
     # Convert the given audio to the desired number of channels
