@@ -82,47 +82,50 @@ class Audio:
         shift_amt = int(random() * shift_limit * sig_len)
         self.signal = self.signal.roll(shift_amt)
 
-    # Generate a Spectrogram
-    def spectrogram_gen(self, n_mels=64, n_fft=1024, hop_len=None) -> Tensor:
+    # Preprocessing of an audio file
+    def preprocess(self) -> None:
+        self.resample()
+        self.rechannel()
+        self.pad_trunc()
+        self.time_shift()
 
+
+# Spectrography datapoint
+class Spectrography:
+
+    # Constructor
+    def __init__(self, audio_file, n_mels=64, n_fft=1024, hop_len=None):
         # spec has shape [channel, n_mels, time]
         # where channel is mono, stereo etc
         spec = transforms.MelSpectrogram(
-            self.sample_rate,
+            audio_file.sample_rate,
             n_fft=n_fft,
             hop_length=hop_len,
             n_mels=n_mels
-        )(self.signal)
+        )(audio_file.signal)
 
         # Convert to decibels
-        return transforms.AmplitudeToDB(top_db=80)(spec)
+        self.spec = transforms.AmplitudeToDB(top_db=80)(spec)
+        self.channel, self.mels, self.steps = self.spec
+
+    # Returns the spectrography Tensor
+    def get_spectrography(self) -> Tensor:
+        return self.spec
 
     # Augment the Spectrogram by masking out some sections of it in both the
     # frequency dimension (i.e. horizontal bars) and the time dimension
     # (vertical bars) to prevent overfitting and to help the model generalise
     # better. The masked sections are replaced with the mean value.
-    @staticmethod
-    def spectro_augment(spec, max_mask_pct=0.1, n_freq_masks=2, n_time_masks=2):
-        _, n_mels, n_steps = spec.shape
-        mask = spec.mean()
+    def spectro_augment(self, max_mask_pct=0.1, n_freq_masks=2, n_time_masks=2):
+        mask = self.spec.mean()
 
-        freq_mask = max_mask_pct * n_mels
+        freq_mask = max_mask_pct * self.mels
         for _ in range(n_freq_masks):
-            spec = transforms.FrequencyMasking(freq_mask)(spec, mask)
+            self.spec = transforms.FrequencyMasking(freq_mask)(self.spec, mask)
 
-        time_mask = max_mask_pct * n_steps
+        time_mask = max_mask_pct * self.steps
         for _ in range(n_time_masks):
-            spec = transforms.TimeMasking(time_mask)(spec, mask)
-
-        return spec
-
-    # Preprocessing of an audio file
-    def preprocess(self) -> Tensor:
-        self.resample()
-        self.rechannel()
-        self.pad_trunc()
-        self.time_shift()
-        return Audio.spectro_augment(self.spectrogram_gen())
+            self.spec = transforms.TimeMasking(time_mask)(self.spec, mask)
 
 
 # Machine-learning Model
@@ -239,6 +242,24 @@ class Model:
 
         print('Finished Training')
 
+    # Classify single audio files
+    def classify(self, spec: Tensor, unsqueeze: bool = False):
+        if unsqueeze:
+            spec = spec.unsqueeze(0)
+
+        with torch.no_grad():
+            inputs = spec.to(Model.DEVICE)
+            inputs_m, inputs_s = inputs.mean(), inputs.std()
+            inputs = (inputs - inputs_m) / inputs_s
+
+            # Get predictions
+            output = self.model(inputs)
+            for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
+                print(f'Class {index + 1} - {(confidence.item()*100):.2f}%')
+
+            _, prediction = torch.max(output, 1)
+            return prediction
+
 
 # Sound Dataset
 class SoundDS(Dataset):
@@ -252,10 +273,15 @@ class SoundDS(Dataset):
     # Get i'th item in dataset
     def __getitem__(self, idx: int) -> Tuple[Tensor, int]:
 
-        audio_file = self.df.iloc[idx, 0]
+        file_name = self.df.iloc[idx, 0]
         class_id = self.df.iloc[idx, 1]
 
-        return Audio(audio_file).preprocess(), class_id
+        audio_file = Audio(file_name)
+        audio_file.preprocess()
+        spectrography = Spectrography(audio_file)
+        spectrography.spectro_augment()
+
+        return spectrography.get_spectrography(), class_id
 
 
 # Audio Classification Model
@@ -350,22 +376,6 @@ def inference(model: AudioClassifier, val_dl: DataLoader):
 
     acc = correct_prediction / total_prediction
     print(f'Accuracy: {acc:.2f}, Total items: {total_prediction}')
-
-
-# Classify
-def classify(model: AudioClassifier, data: Tensor) -> int:
-    with torch.no_grad():
-        inputs = data.to(Model.DEVICE)
-        inputs_m, inputs_s = inputs.mean(), inputs.std()
-        inputs = (inputs - inputs_m) / inputs_s
-
-        # Get predictions
-        output = model(inputs)
-        for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
-            print(f'Class {index + 1} - {(confidence.item()*100):.2f}%')
-
-        _, prediction = torch.max(output, 1)
-        return prediction
 
 
 if __name__ == '__main__':
