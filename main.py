@@ -324,6 +324,24 @@ def inference(model: AudioClassifier, val_dl: DataLoader):
     print(f'Accuracy: {acc:.2f}, Total items: {total_prediction}')
 
 
+# Classify
+def classify(model: AudioClassifier, data: Tensor) -> int:
+    with torch.no_grad():
+        inputs = data.to(device)
+
+        # Get predictions
+        output = model(inputs)
+        return output
+
+        # Get the predicted class with the highest score
+        _, prediction = torch.max(outputs, 1)
+
+        # Count of predictions that matched the target label
+        # noinspection PyUnresolvedReferences
+        correct_prediction += (prediction == labels).sum().item()
+        total_prediction += prediction.shape[0]
+
+
 # Initialization
 my_dataset = SoundDS(training_data)
 
@@ -343,3 +361,4 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 myModel = myModel.to(device)
 training(myModel, train_dataloader, 10)
 inference(myModel, val_dataloader)
+
