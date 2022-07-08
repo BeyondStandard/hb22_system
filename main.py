@@ -230,8 +230,11 @@ class Model:
         self.inference(val_dataloader)
 
     # Model initialization from a pre-trained file
-    def initialize_from_file(self, filename: str) -> None:
-        self.model = torch.load(f'Models/{filename}.pt')
+    def initialize_from_file(self, filename: str, api: bool) -> None:
+        if api: 
+            self.model = torch.load(filename)
+        else: 
+            self.model = torch.load(f'Models/{filename}.pt')
 
     # Model exporting to a pickle file
     def store_to_file(self, filename: str) -> None:
@@ -344,6 +347,7 @@ class Model:
             inputs = data.to(Model.DEVICE)
             inputs_m, inputs_s = inputs.mean(), inputs.std()
             inputs = (inputs - inputs_m) / inputs_s
+            print(inputs)
 
             # Get predictions
             output = self.model(inputs)
