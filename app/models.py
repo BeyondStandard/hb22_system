@@ -7,5 +7,5 @@ class Audio(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     audio_encoded = Column(String)
-    image = Column(String)
+    file_name = Column(String)
     

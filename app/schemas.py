@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 class AudioBase(BaseModel):
     audio_encoded: str
-    image: str
+    file_name: str
 
 class AudioCreate(AudioBase):
     pass

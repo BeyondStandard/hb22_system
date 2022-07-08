@@ -1,17 +1,16 @@
+import base64
+import shutil
 from statistics import mode
 from typing import List
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 from crud import create_audio, get_latest_audio
-
 from crud import get_audios, create_audio
 from schemas import Audio as AudioSchema
-
 from sqlalchemy.orm import Session
 
 from database import SessionLocal, engine, Base
-
 
 Base.metadata.create_all(bind=engine)
 
@@ -51,8 +50,6 @@ def get_audio(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return audios
 
 @app.post("/ingest", response_model=AudioSchema)
-async def ingest_audio(audio: AudioSchema, db: Session = Depends(get_db)):
+async def ingest_audio_b64(audio: AudioSchema, db: Session = Depends(get_db)):
+    print(audio)
     return create_audio(db, audio)
-
-
-
