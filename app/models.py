@@ -1,5 +1,5 @@
 from database import Base
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, PickleType, String
 
 
 class Audio(Base):
@@ -7,7 +7,7 @@ class Audio(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     car_type = Column(String)
-    probability = Column(String)
+    probability = Column(PickleType)
     file_name = Column(String)
     audio_encoded = Column(String)
     
