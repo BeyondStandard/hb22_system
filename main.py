@@ -378,14 +378,12 @@ class Model:
             output_dict = {'confidence': {}}
 
             for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
-                output_dict['confidence'][index] = confidence
+                output_dict['confidence'][index] = confidence.item()
 
             confidence, prediction = torch.max(output, 1)
-            prediction = prediction.item()
-            output_dict['winner_index'] = prediction
-            output_dict['winner_label'] = Model.CLASSES[prediction]
-            output_dict['winner_confidence'] = confidence
-            print(output_dict)
+            output_dict['winner_index'] = prediction.item()
+            output_dict['winner_label'] = Model.CLASSES[prediction.item()]
+            output_dict['winner_confidence'] = confidence.item()
 
             return output_dict
 
@@ -401,7 +399,7 @@ class Model:
         output = self.classify(wav_spectro, unsqueeze=True)
         output['Waveform'] = wav_audio.plot_waveform().decode('ascii')
         output['Spectrograph'] = wav_audio.plot_spectrogram().decode('ascii')
-        print(output)
+
         return dumps(output)
 
 
