@@ -5,6 +5,7 @@
 # TODO: Logging
 
 # noinspection PyUnresolvedReferences
+import logging
 from torchaudio import transforms, load, save
 from torch.utils.data import DataLoader, Dataset, random_split
 
@@ -228,7 +229,7 @@ class Model:
     def __init__(self) -> NoReturn:
         self.model = None
 
-        dataset_path = Path.cwd() / 'Datasets'
+        dataset_path = Path.cwd() / './../Datasets'
         col = ['filename', 'class_id']
 
         dataframes = []
@@ -385,17 +386,18 @@ class Model:
 
             for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
                 output_dict['confidence'][index] = confidence.item()
+                logging.getLogger().error(index, type(index))
+                print(index, type(index))
 
             confidence, prediction = torch.max(output, 1)
             output_dict['winner_index'] = prediction.item()
             output_dict['winner_label'] = Model.CLASSES[prediction.item()]
             output_dict['winner_confidence'] = confidence.item()
             
-            print(output_dict, flush=True)
             return output_dict
 
     # Helper function for the server work
-    def server_process(self, base64_wav: str) -> str:
+    def server_process(self, base64_wav: str) -> dict:
         wav_path = Audio.base64_to_filepath(base64_wav)
         wav_audio = Audio(wav_path)
         wav_audio.preprocess()
