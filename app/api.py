@@ -5,9 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 from crud import create_audio, get_latest_audio
 from crud import get_audios, create_audio
+from mock import mock_audio
 from schemas import Audio as AudioSchema
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base
+import sys
+sys.path.insert(1, './../')
+
+from main import Audio
 
 Base.metadata.create_all(bind=engine)
 
@@ -38,6 +43,9 @@ def read_root():
 
 @app.get("/latest", response_model=AudioSchema)
 def get_latest( db: Session = Depends(get_db)):
+    new = Audio.base64_to_filepath("SGVsbG8gdGhlcmU=")
+    print(new)
+
     return get_latest_audio(db)
 
 
@@ -48,6 +56,5 @@ def get_audio(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 
 @app.post("/ingest", response_model=AudioSchema)
 async def ingest_audio_b64(audio: AudioSchema, db: Session = Depends(get_db)):
-
 
     return create_audio(db, audio)
