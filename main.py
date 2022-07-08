@@ -97,7 +97,7 @@ class Spectrography:
     def __init__(self, audio_file, n_mels=64, n_fft=1024, hop_len=None):
         # spec has shape [channel, n_mels, time]
         # where channel is mono, stereo etc
-        spec = transforms.MelSpectrogram(
+        self.spec = transforms.MelSpectrogram(
             audio_file.sample_rate,
             n_fft=n_fft,
             hop_length=hop_len,
@@ -105,8 +105,7 @@ class Spectrography:
         )(audio_file.signal)
 
         # Convert to decibels
-        self.spec = transforms.AmplitudeToDB(top_db=80)(spec)
-        self.channel, self.mels, self.steps = self.spec
+        self.spec = transforms.AmplitudeToDB(top_db=80)(self.spec)
 
     # Returns the spectrography Tensor
     def get_spectrography(self) -> Tensor:
@@ -117,13 +116,14 @@ class Spectrography:
     # (vertical bars) to prevent overfitting and to help the model generalise
     # better. The masked sections are replaced with the mean value.
     def spectro_augment(self, max_mask_pct=0.1, n_freq_masks=2, n_time_masks=2):
+        _, mels, steps = self.spec
         mask = self.spec.mean()
 
-        freq_mask = max_mask_pct * self.mels
+        freq_mask = max_mask_pct * mels
         for _ in range(n_freq_masks):
             self.spec = transforms.FrequencyMasking(freq_mask)(self.spec, mask)
 
-        time_mask = max_mask_pct * self.steps
+        time_mask = max_mask_pct * steps
         for _ in range(n_time_masks):
             self.spec = transforms.TimeMasking(time_mask)(self.spec, mask)
 
@@ -203,7 +203,8 @@ class Model:
             # Repeat for each batch in the training set
             for i, data in enumerate(train_dl):
                 # Get the input features and target labels, and put them on GPU
-                inputs, labels = data[0].to(Model.DEVICE), data[1].to(Model.DEVICE)
+                inputs = data[0].to(Model.DEVICE)
+                labels = data[1].to(Model.DEVICE)
 
                 # Normalize the inputs
                 inputs_m, inputs_s = inputs.mean(), inputs.std()
