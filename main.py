@@ -222,8 +222,6 @@ class Model:
     def __init__(self) -> NoReturn:
         self.model = None
 
-    # Model initialization through retraining
-    def initialize_training(self) -> None:
         dataset_path = Path.cwd() / 'Datasets'
         col = ['filename', 'class_id']
 
@@ -233,13 +231,16 @@ class Model:
             dataframes.append(d)
             Model.CLASSES[index] = "".join(folder.stem.split()[1:])
 
-        my_dataset = SoundDS(concat(dataframes, ignore_index=True))
+        self.dataset = SoundDS(concat(dataframes, ignore_index=True))
+
+    # Model initialization through retraining
+    def initialize_training(self) -> None:
 
         # Random split of 80:20 between training and validation
-        num_items = len(my_dataset)
+        num_items = len(self.dataset)
         num_train = round(num_items * Model.TRAINING_SET)
         num_val = num_items - num_train
-        train_ds, val_ds = random_split(my_dataset, [num_train, num_val])
+        train_ds, val_ds = random_split(self.dataset, [num_train, num_val])
 
         # Create training and validation data loaders
         train_dataloader = DataLoader(train_ds, Model.BATCH_SIZE, shuffle=True)
@@ -379,10 +380,12 @@ class Model:
             for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
                 output_dict['confidence'][index] = confidence
 
-            confidence, prediction = torch.max(output[0], 1)
+            confidence, prediction = torch.max(output, 1)
+            prediction = prediction.item()
             output_dict['winner_index'] = prediction
             output_dict['winner_label'] = Model.CLASSES[prediction]
             output_dict['winner_confidence'] = confidence
+            print(output_dict)
 
             return output_dict
 
@@ -395,9 +398,10 @@ class Model:
         wav_spectro.spectro_augment()
         unlink(wav_path)
 
-        output = self.classify(wav_spectro)
+        output = self.classify(wav_spectro, unsqueeze=True)
         output['Waveform'] = wav_audio.plot_waveform().decode('ascii')
         output['Spectrograph'] = wav_audio.plot_spectrogram().decode('ascii')
+        print(output)
         return dumps(output)
 
 
