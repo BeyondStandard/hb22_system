@@ -54,16 +54,9 @@ def get_audio(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 @app.post("/ingest", response_model=AudioSchema)
 async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
     
-    file_path = Audio.base64_to_filepath(schema.audio_encoded)
-    new_audio = Audio(file_path)
-    new_audio.preprocess()
-    s = Spectrography(new_audio)
-    s.spectro_augment()
     model = Model()
-
-    model.initialize_from_file("./../Models/cloud_model_1.pt", False)
-    result = model.classify(s, unsqueeze = True)
-    print(result)
+    result = model.server_process(schema.audio_encoded)
+    println(result)
 
     classifier= {
         "probability": "25%",
