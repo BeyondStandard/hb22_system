@@ -392,7 +392,7 @@ class Model:
         wav_spectro.spectro_augment()
         unlink(wav_path)
 
-        output = self.classify(wav_spectro)
+        output = self.classify(wav_spectro, unsqueeze=True)
         output['Waveform'] = wav_audio.plot_waveform().decode('ascii')
         output['Spectrograph'] = wav_audio.plot_spectrogram().decode('ascii')
         return dumps(output)
