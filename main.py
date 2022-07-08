@@ -324,7 +324,7 @@ class Model:
 
     # Model initialization from a pre-trained file
     def initialize_from_file(self, filename: str) -> None:
-        self.model = torch.load(filename)
+        self.model = torch.load(f'Models/{filename}.at')
 
     # Model exporting to a pickle file
     def store_to_file(self, filename: str) -> None:
@@ -393,3 +393,7 @@ class Model:
             print(f'Epoch: {epoch}, Loss: {avg_loss:.2f}, Accuracy: {acc:.2f}')
 
         print('Finished Training')
+
+
+if __name__ == '__main__':
+    model = Model()
