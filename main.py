@@ -1,12 +1,12 @@
 # noinspection PyUnresolvedReferences
 from torchaudio import transforms, load
-from pathlib import Path
 from torch.utils.data import DataLoader, Dataset, random_split
+
+from pandas import DataFrame, concat
+from typing import Tuple, NoReturn
 from random import random, randint
-from torch import Tensor
-from typing import Tuple
-import matplotlib.pyplot as plt
-import pandas as pd
+from pathlib import Path
+from torch import Tensor, cat, nn
 import torch
 
 # Typing
@@ -14,9 +14,9 @@ AudioFile = Tuple[Tensor, int]
 
 # Dataframe initialization
 dataset_path = Path.cwd() / 'Datasets'
-col = ['filename', 'class']
-df = pd.concat([
-    pd.DataFrame(((file, int(index)) for file in folder.iterdir()), columns=col)
+col = ['filename', 'class_id']
+training_data = concat([
+    DataFrame(((file, int(index)) for file in folder.iterdir()), columns=col)
     for index, folder in enumerate(dataset_path.iterdir())
 ], ignore_index=True)
 
@@ -45,7 +45,7 @@ class AudioUtil:
 
         # Convert from mono to stereo by duplicating the first channel
         else:
-            resig = torch.cat([signal, signal])
+            resig = cat([signal, signal])
 
         return resig, sample_rate
 
@@ -65,7 +65,7 @@ class AudioUtil:
         # Resample the second channel and merge both channels
         if num_channels > 1:
             retwo = transforms.Resample(sample_rate, new_rate)(signal[1:, :])
-            resig = torch.cat([resig, retwo])
+            resig = cat([resig, retwo])
 
         return resig, new_rate
 
@@ -86,7 +86,7 @@ class AudioUtil:
             pad_end_len = max_len - sig_len - pad_begin_len
             pad_begin = torch.zeros((num_rows, pad_begin_len))
             pad_end = torch.zeros((num_rows, pad_end_len))
-            signal = torch.cat((pad_begin, signal, pad_end), 1)
+            signal = cat((pad_begin, signal, pad_end), 1)
 
         return signal, sample_rate
 
@@ -140,28 +140,21 @@ class AudioUtil:
 
 # Sound Dataset
 class SoundDS(Dataset):
-    def __init__(self, df):
+    def __init__(self, df: DataFrame) -> NoReturn:
         self.df = df
 
-    # ----------------------------
     # Number of items in dataset
-    # ----------------------------
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.df)
 
-        # ----------------------------
-
     # Get i'th item in dataset
-    # ----------------------------
-    def __getitem__(self, idx):
-        # Absolute file path of the audio file - concatenate the audio directory with
-        # the relative path
-        audio_file = self.df.loc[idx, 'filename']
-        # Get the Class ID
-        class_id = self.df.loc[idx, 'class']
+    def __getitem__(self, idx: int) -> Tuple[Tensor, int]:
 
-        # reaud = AudioUtil.resample(aud, self.sr)
-        # rechan = AudioUtil.rechannel(reaud)
+        audio_file = self.df.iloc[idx, 0]
+        class_id = self.df.iloc[idx, 1]
+
+        # audio_file = AudioUtil.resample(audio_file)
+        # audio_file = AudioUtil.rechannel(audio_file)
 
         audio_file = AudioUtil.open(audio_file)
         audio_file = AudioUtil.pad_trunc(audio_file)
@@ -171,63 +164,45 @@ class SoundDS(Dataset):
 
         return spectrogram, class_id
 
-myds = SoundDS(df)
 
-# Random split of 80:20 between training and validation
-num_items = len(myds)
-num_train = round(num_items * 0.8)
-num_val = num_items - num_train
-train_ds, val_ds = random_split(myds, [num_train, num_val])
-
-# Create training and validation data loaders
-train_dl = torch.utils.data.DataLoader(train_ds, batch_size=16, shuffle=True)
-val_dl = torch.utils.data.DataLoader(val_ds, batch_size=16, shuffle=False)
-
-import torch.nn.functional as F
-from torch import nn
-from torch.nn import init
-
-
-# ----------------------------
 # Audio Classification Model
-# ----------------------------
 class AudioClassifier(nn.Module):
-    # ----------------------------
+
     # Build the model architecture
-    # ----------------------------
-    def __init__(self):
+    def __init__(self) -> NoReturn:
         super().__init__()
         conv_layers = []
 
-        # First Convolution Block with Relu and Batch Norm. Use Kaiming Initialization
-        self.conv1 = nn.Conv2d(2, 8, kernel_size=(5, 5), stride=(2, 2), padding=(2, 2))
+        # First Convolution Block with Relu and Batch Norm.
+        # Use Kaiming Initialization
+        self.conv1 = nn.Conv2d(2, 8, (5, 5), (2, 2), (2, 2))
         self.relu1 = nn.ReLU()
         self.bn1 = nn.BatchNorm2d(8)
-        init.kaiming_normal_(self.conv1.weight, a=0.1)
+        nn.init.kaiming_normal_(self.conv1.weight, a=0.1)
         self.conv1.bias.data.zero_()
         conv_layers += [self.conv1, self.relu1, self.bn1]
 
         # Second Convolution Block
-        self.conv2 = nn.Conv2d(8, 16, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+        self.conv2 = nn.Conv2d(8, 16, (3, 3), (2, 2), (1, 1))
         self.relu2 = nn.ReLU()
         self.bn2 = nn.BatchNorm2d(16)
-        init.kaiming_normal_(self.conv2.weight, a=0.1)
+        nn.init.kaiming_normal_(self.conv2.weight, a=0.1)
         self.conv2.bias.data.zero_()
         conv_layers += [self.conv2, self.relu2, self.bn2]
 
         # Second Convolution Block
-        self.conv3 = nn.Conv2d(16, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+        self.conv3 = nn.Conv2d(16, 32, (3, 3), (2, 2), (1, 1))
         self.relu3 = nn.ReLU()
         self.bn3 = nn.BatchNorm2d(32)
-        init.kaiming_normal_(self.conv3.weight, a=0.1)
+        nn.init.kaiming_normal_(self.conv3.weight, a=0.1)
         self.conv3.bias.data.zero_()
         conv_layers += [self.conv3, self.relu3, self.bn3]
 
         # Second Convolution Block
-        self.conv4 = nn.Conv2d(32, 64, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+        self.conv4 = nn.Conv2d(32, 64, (3, 3), (2, 2), (1, 1))
         self.relu4 = nn.ReLU()
         self.bn4 = nn.BatchNorm2d(64)
-        init.kaiming_normal_(self.conv4.weight, a=0.1)
+        nn.init.kaiming_normal_(self.conv4.weight, a=0.1)
         self.conv4.bias.data.zero_()
         conv_layers += [self.conv4, self.relu4, self.bn4]
 
@@ -238,9 +213,7 @@ class AudioClassifier(nn.Module):
         # Wrap the Convolutional Blocks
         self.conv = nn.Sequential(*conv_layers)
 
-    # ----------------------------
     # Forward pass computations
-    # ----------------------------
     def forward(self, x):
         # Run the convolutional blocks
         x = self.conv(x)
@@ -256,12 +229,26 @@ class AudioClassifier(nn.Module):
         return x
 
 
+# Initialization
+my_dataset = SoundDS(training_data)
+
+# Random split of 80:20 between training and validation
+num_items = len(my_dataset)
+num_train = round(num_items * 0.8)
+num_val = num_items - num_train
+train_ds, val_ds = random_split(my_dataset, [num_train, num_val])
+
+# Create training and validation data loaders
+train_dl = DataLoader(train_ds, batch_size=16, shuffle=True)
+val_dl = DataLoader(val_ds, batch_size=16, shuffle=False)
+
 # Create the model and put it on the GPU if available
 myModel = AudioClassifier()
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 myModel = myModel.to(device)
+
 # Check that it is on Cuda
-next(myModel.parameters()).device
+print(next(myModel.parameters()).device)
 
 
 # ----------------------------
