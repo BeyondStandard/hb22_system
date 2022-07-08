@@ -330,12 +330,16 @@ def classify(model: AudioClassifier, data: Tensor) -> int:
         print(data.shape)
         inputs = data.to(device)
         print(inputs.shape)
+
+        inputs_m, inputs_s = inputs.mean(), inputs.std()
+        inputs = (inputs - inputs_m) / inputs_s
+
         # Get predictions
         output = model(inputs)
         print(output.shape)
         print(output)
 
-        for index, confidence in enumerate(output[1]):
+        for index, confidence in enumerate(output[0]):
             print(index, confidence)
 
         _, prediction = torch.max(output, 1)
