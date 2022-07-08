@@ -9,6 +9,9 @@ from pathlib import Path
 from torch import Tensor, cat, nn
 import torch
 
+# Hardware
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 # Typing
 AudioFile = Tuple[Tensor, int]
 
@@ -229,71 +232,6 @@ class AudioClassifier(nn.Module):
         return x
 
 
-# Training Loop
-def training(model: AudioClassifier, train_dl: DataLoader, num_epochs: int):
-
-    # Loss Function, Optimizer and Scheduler
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-    # noinspection PyUnresolvedReferences
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer,
-        max_lr=0.001,
-        steps_per_epoch=int(len(train_dl)),
-        epochs=num_epochs,
-        anneal_strategy='linear'
-    )
-
-    # Repeat for each epoch
-    for epoch in range(num_epochs):
-        running_loss = 0.0
-        correct_prediction = 0
-        total_prediction = 0
-
-        # Repeat for each batch in the training set
-        for i, data in enumerate(train_dl):
-            # Get the input features and target labels, and put them on the GPU
-            inputs, labels = data[0].to(device), data[1].to(device)
-
-            # Normalize the inputs
-            inputs_m, inputs_s = inputs.mean(), inputs.std()
-            inputs = (inputs - inputs_m) / inputs_s
-
-            # Zero the parameter gradients
-            optimizer.zero_grad()
-
-            # forward + backward + optimize
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-
-            # Keep stats for Loss and Accuracy
-            running_loss += loss.item()
-
-            # Get the predicted class with the highest score
-            _, prediction = torch.max(outputs, 1)
-
-            # Count of predictions that matched the target label
-            # noinspection PyUnresolvedReferences
-            correct_prediction += (prediction == labels).sum().item()
-            total_prediction += prediction.shape[0]
-
-            # if i % 10 == 0:    # print every 10 mini-batches
-            #    print('[%d, %5d] loss: %.3f' %
-            #       (epoch + 1, i + 1, running_loss / 10))
-
-        # Print stats at the end of the epoch
-        num_batches = len(train_dl)
-        avg_loss = running_loss / num_batches
-        acc = correct_prediction / total_prediction
-        print(f'Epoch: {epoch}, Loss: {avg_loss:.2f}, Accuracy: {acc:.2f}')
-
-    print('Finished Training')
-
-
 # Inference
 def inference(model: AudioClassifier, val_dl: DataLoader):
     correct_prediction = 0
@@ -303,7 +241,7 @@ def inference(model: AudioClassifier, val_dl: DataLoader):
     with torch.no_grad():
         for data in val_dl:
             # Get the input features and target labels, and put them on the GPU
-            inputs, labels = data[0].to(device), data[1].to(device)
+            inputs, labels = data[0].to(DEVICE), data[1].to(DEVICE)
 
             # Normalize the inputs
             inputs_m, inputs_s = inputs.mean(), inputs.std()
@@ -324,19 +262,27 @@ def inference(model: AudioClassifier, val_dl: DataLoader):
     print(f'Accuracy: {acc:.2f}, Total items: {total_prediction}')
 
 
+# Preprocess
+def preprocess(path: Path) -> Tensor:
+    audio_file = AudioUtil.open(path)
+    audio_file = AudioUtil.resample(audio_file)
+    audio_file = AudioUtil.rechannel(audio_file)
+    audio_file = AudioUtil.pad_trunc(audio_file)
+    audio_file = AudioUtil.time_shift(audio_file)
+    audio_file = AudioUtil.spectrogram(audio_file)
+    audio_file = AudioUtil.spectro_augment(audio_file)
+    return audio_file.unsqueeze(0)
+
+
 # Classify
 def classify(model: AudioClassifier, data: Tensor) -> int:
     with torch.no_grad():
-        print(data.shape)
-        inputs = data.to(device)
-        print(inputs.shape)
-
+        inputs = data.to(DEVICE)
         inputs_m, inputs_s = inputs.mean(), inputs.std()
         inputs = (inputs - inputs_m) / inputs_s
 
         # Get predictions
         output = model(inputs)
-
         for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
             print(f'Class {index + 1} - {(confidence.item()*100):.2f}%')
 
@@ -344,22 +290,106 @@ def classify(model: AudioClassifier, data: Tensor) -> int:
         return prediction
 
 
-# Initialization
-my_dataset = SoundDS(training_data)
+# Machine-learning Model
+class Model:
 
-# Random split of 80:20 between training and validation
-num_items = len(my_dataset)
-num_train = round(num_items * 0.8)
-num_val = num_items - num_train
-train_ds, val_ds = random_split(my_dataset, [num_train, num_val])
+    # Model constants
+    TRAINING_SET = 0.8
+    EVALUATION_SET = 0.2
+    BATCH_SIZE = 16
+    EPOCH_COUNT = 10
 
-# Create training and validation data loaders
-train_dataloader = DataLoader(train_ds, batch_size=16, shuffle=True)
-val_dataloader = DataLoader(val_ds, batch_size=16, shuffle=False)
+    def __init__(self) -> NoReturn:
+        self.model = None
 
-# Create the model and put it on the GPU if available
-myModel = AudioClassifier()
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-myModel = myModel.to(device)
-training(myModel, train_dataloader, 10)
-inference(myModel, val_dataloader)
+    # Model initialization through retraining
+    def initialize_training(self) -> None:
+        my_dataset = SoundDS(training_data)
+
+        # Random split of 80:20 between training and validation
+        num_items = len(my_dataset)
+        num_train = round(num_items * Model.TRAINING_SET)
+        num_val = num_items - num_train
+        train_ds, val_ds = random_split(my_dataset, [num_train, num_val])
+
+        # Create training and validation data loaders
+        train_dataloader = DataLoader(train_ds, Model.BATCH_SIZE, shuffle=True)
+        val_dataloader = DataLoader(val_ds, Model.BATCH_SIZE, shuffle=False)
+
+        # Create the model and put it on the GPU if available
+        self.model = AudioClassifier()
+        self.model = self.model.to(DEVICE)
+        self.training(train_dataloader)
+        inference(self.model, val_dataloader)
+
+    # Model initialization from a pre-trained file
+    def initialize_from_file(self, filename: str) -> None:
+        self.model = torch.load(filename)
+
+    # Model exporting to a pickle file
+    def store_to_file(self, filename: str) -> None:
+        torch.save(self.model, f'models/{filename}.pt')
+
+    # Training Loop
+    def training(self, train_dl: DataLoader):
+
+        # Loss Function, Optimizer and Scheduler
+        criterion = nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+
+        # noinspection PyUnresolvedReferences
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=0.001,
+            steps_per_epoch=int(len(train_dl)),
+            epochs=num_epochs,
+            anneal_strategy='linear'
+        )
+
+        # Repeat for each epoch
+        for epoch in range(Model.EPOCH_COUNT):
+            running_loss = 0.0
+            correct_prediction = 0
+            total_prediction = 0
+
+            # Repeat for each batch in the training set
+            for i, data in enumerate(train_dl):
+                # Get the input features and target labels, and put them on GPU
+                inputs, labels = data[0].to(DEVICE), data[1].to(DEVICE)
+
+                # Normalize the inputs
+                inputs_m, inputs_s = inputs.mean(), inputs.std()
+                inputs = (inputs - inputs_m) / inputs_s
+
+                # Zero the parameter gradients
+                optimizer.zero_grad()
+
+                # forward + backward + optimize
+                outputs = self.model(inputs)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+                scheduler.step()
+
+                # Keep stats for Loss and Accuracy
+                running_loss += loss.item()
+
+                # Get the predicted class with the highest score
+                _, prediction = torch.max(outputs, 1)
+
+                # Count of predictions that matched the target label
+                # noinspection PyUnresolvedReferences
+                correct_prediction += (prediction == labels).sum().item()
+                total_prediction += prediction.shape[0]
+
+                # if i % 10 == 0:    # print every 10 mini-batches
+                #    print('[%d, %5d] loss: %.3f' %
+                #       (epoch + 1, i + 1, running_loss / 10))
+
+            # Print stats at the end of the epoch
+            num_batches = len(train_dl)
+            avg_loss = running_loss / num_batches
+            acc = correct_prediction / total_prediction
+            print(f'Epoch: {epoch}, Loss: {avg_loss:.2f}, Accuracy: {acc:.2f}')
+
+        print('Finished Training')
