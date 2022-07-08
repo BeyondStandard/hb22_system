@@ -222,8 +222,6 @@ class Model:
     def __init__(self) -> NoReturn:
         self.model = None
 
-    # Model initialization through retraining
-    def initialize_training(self) -> None:
         dataset_path = Path.cwd() / 'Datasets'
         col = ['filename', 'class_id']
 
@@ -233,13 +231,16 @@ class Model:
             dataframes.append(d)
             Model.CLASSES[index] = "".join(folder.stem.split()[1:])
 
-        my_dataset = SoundDS(concat(dataframes, ignore_index=True))
+        self.dataset = SoundDS(concat(dataframes, ignore_index=True))
+
+    # Model initialization through retraining
+    def initialize_training(self) -> None:
 
         # Random split of 80:20 between training and validation
-        num_items = len(my_dataset)
+        num_items = len(self.dataset)
         num_train = round(num_items * Model.TRAINING_SET)
         num_val = num_items - num_train
-        train_ds, val_ds = random_split(my_dataset, [num_train, num_val])
+        train_ds, val_ds = random_split(self.dataset, [num_train, num_val])
 
         # Create training and validation data loaders
         train_dataloader = DataLoader(train_ds, Model.BATCH_SIZE, shuffle=True)
@@ -488,3 +489,4 @@ class AudioClassifier(nn.Module):
 
 if __name__ == '__main__':
     model = Model()
+    model.initialize_training()
