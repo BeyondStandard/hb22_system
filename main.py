@@ -489,4 +489,3 @@ class AudioClassifier(nn.Module):
 
 if __name__ == '__main__':
     model = Model()
-    model.initialize_training()
