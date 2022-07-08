@@ -1,0 +1,10 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "driver": "SQLite",
+            "name": "asdf",
+            "database": "${workspaceFolder:hb22_system}/app/sql.db"
+        }
+    ]
+}
