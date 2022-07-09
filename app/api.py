@@ -88,7 +88,7 @@ async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
         "car_type": "jeep"
     }
 
-    returnvalue =  create_audio(db, schema, classifier)
+    returnvalue = create_audio(db, schema, classifier)
     await set_state()
     return returnvalue
 
@@ -106,6 +106,7 @@ async def websocket_endpoint(websocket: WebSocket):
             result = await get_state()
             if result is True:
                 resp = {"state": ingest_state}
+                asyncio.io.sleep(150)
                 await websocket.send_json(resp)
                 ingest_state = False
         except Exception as e:

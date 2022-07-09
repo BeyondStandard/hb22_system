@@ -13,7 +13,6 @@ def create_audio(db: Session, audio: AudioCreate, classifier):
     db.add(new_audio)
     db.commit()
     db.refresh(new_audio)
-    new_audio.probability
     return new_audio
 
 def get_latest_audio(db: Session):
