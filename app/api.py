@@ -4,6 +4,7 @@ from typing import Any, List, Dict, Optional
 from fastapi import Depends, FastAPI, File, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
+from sqlalchemy import inspect
 from yaml import dump
 from crud import create_audio, get_latest_audio
 from crud import get_audios, create_audio
@@ -94,6 +95,8 @@ async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
     await set_state()
     return returnvalue
 
+def object_as_dict(obj):
+    return { c.key: getattr(obj, c.key) for c in inspect(obj).mapper.column_attrs }
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -109,10 +112,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if result is True:
                 global ingest_state
                 latest_audio = get_latest_audio(next(get_db()))
-                latest_audio = dumps(latest_audio)
-                latest_audio = loads(latest_audio)
-                print(latest_audio)
-                resp = {"state": ingest_state, "data": latest_audio}
+                resp = {"state": ingest_state, "data": object_as_dict(latest_audio)}
                 #asyncio.sleep(150)
                 await websocket.send_json(resp)
                 ingest_state = False
