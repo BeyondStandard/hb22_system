@@ -364,14 +364,15 @@ class Model:
     # Classify single audio files
     def classify(self, spectro) -> dict:
         with torch.no_grad():
-            inputs = spectro.get_spectrography().unsqueeze(0).to(Model.DEVICE)
+            inputs = spectro.get_spectrography().unsqueeze(0)
+            inputs = torch.cat((inputs, torch.rand((15, 2, 64, 259))))
+            inputs = inputs.to(Model.DEVICE)
 
             # inputs_m, inputs_s = inputs.mean(), inputs.std()
             # inputs = (inputs - inputs_m) / inputs_s
 
             # Get predictions
-            black_magic = torch.empty((15, 2, 64, 259))
-            output = self.model(torch.cat((inputs, black_magic)))
+            output = self.model(inputs)
             output_dict = {'confidence': {}}
 
             for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
