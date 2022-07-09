@@ -12,7 +12,7 @@ from schemas import Classifier
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base
 import sys
-from sqlalchemy.ext.serializer import dumps
+from sqlalchemy.ext.serializer import dumps, loads
 sys.path.insert(1, './../')
 
 from main import Audio, Spectrography, Model
@@ -109,7 +109,10 @@ async def websocket_endpoint(websocket: WebSocket):
             if result is True:
                 global ingest_state
                 latest_audio = get_latest_audio(next(get_db()))
-                resp = {"state": ingest_state, "data": dumps(latest_audio)}
+                latest_audio = dumps(latest_audio)
+                latest_audio = loads(latest_audio)
+                print(latest_audio)
+                resp = {"state": ingest_state, "data": latest_audio}
                 #asyncio.sleep(150)
                 await websocket.send_json(resp)
                 ingest_state = False
