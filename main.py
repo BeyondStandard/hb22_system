@@ -5,7 +5,6 @@
 # TODO: Logging
 
 # noinspection PyUnresolvedReferences
-import logging
 from torchaudio import transforms, load, save
 from torch.utils.data import DataLoader, Dataset, random_split
 
@@ -229,7 +228,7 @@ class Model:
     def __init__(self) -> NoReturn:
         self.model = None
 
-        dataset_path = Path.cwd() / './../Datasets'
+        dataset_path = Path.cwd() / 'Datasets'
         col = ['filename', 'class_id']
 
         dataframes = []
@@ -260,11 +259,8 @@ class Model:
         self.inference(val_dataloader)
 
     # Model initialization from a pre-trained file
-    def initialize_from_file(self, filename: str, api: bool) -> None:
-        if api: 
-            self.model = torch.load(filename)
-        else: 
-            self.model = torch.load(f'Models/{filename}.pt')
+    def initialize_from_file(self, filename: str) -> None:
+        self.model = torch.load(f'Models/{filename}.pt')
 
     # Model exporting to a pickle file
     def store_to_file(self, filename: str) -> None:
@@ -380,8 +376,6 @@ class Model:
 
             for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
                 output_dict['confidence'][index] = confidence.item()
-                logging.getLogger().error(index, type(index))
-                print(index, type(index))
 
             confidence, prediction = torch.max(output, 1)
             confidence, prediction = confidence[0].item(), prediction[0].item()
@@ -393,7 +387,7 @@ class Model:
             return output_dict
 
     # Helper function for the server work
-    def server_process(self, base64_wav: str) -> dict:
+    def server_process(self, base64_wav: str) -> str:
         wav_path = Audio.base64_to_filepath(base64_wav)
         wav_audio = Audio(wav_path)
         wav_audio.preprocess()
@@ -405,7 +399,7 @@ class Model:
         output['Waveform'] = wav_audio.plot_waveform().decode('ascii')
         output['Spectrograph'] = wav_audio.plot_spectrogram().decode('ascii')
 
-        return output
+        return dumps(output)
 
 
 # Sound Dataset
