@@ -233,7 +233,6 @@ class Model:
 
         dataframes = []
         for index, folder in enumerate(sorted(dataset_path.iterdir())):
-            print(index, folder)
             d = DataFrame(((f, index) for f in folder.iterdir()), columns=col)
             dataframes.append(d)
             Model.CLASSES[index] = "".join(folder.stem.split()[1:])
@@ -363,31 +362,27 @@ class Model:
         print(f'Accuracy: {acc:.2f}, Total items: {total_prediction}')
 
     # Classify single audio files
-    def classify(self, spectro, unsqueeze=False, normalize=False) -> dict:
-        if unsqueeze:
-            data = spectro.get_spectrography().unsqueeze(0)
-
-        else:
-            data = spectro.get_spectrography()
-
+    def classify(self, spectro) -> dict:
         with torch.no_grad():
-            inputs = data.to(Model.DEVICE)
+            inputs = spectro.get_spectrography().unsqueeze(0).to(Model.DEVICE)
 
-            if normalize:
-                inputs_m, inputs_s = inputs.mean(), inputs.std()
-                inputs = (inputs - inputs_m) / inputs_s
+            # inputs_m, inputs_s = inputs.mean(), inputs.std()
+            # inputs = (inputs - inputs_m) / inputs_s
 
             # Get predictions
-            output = self.model(inputs)
+            black_magic = torch.empty((15, 2, 64, 259))
+            output = self.model(torch.cat((inputs, black_magic)))
             output_dict = {'confidence': {}}
 
             for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
                 output_dict['confidence'][index] = confidence.item()
 
             confidence, prediction = torch.max(output, 1)
-            output_dict['winner_index'] = prediction.item()
-            output_dict['winner_label'] = Model.CLASSES[prediction.item()]
-            output_dict['winner_confidence'] = confidence.item()
+            confidence, prediction = confidence[0].item(), prediction[0].item()
+
+            output_dict['winner_index'] = prediction
+            output_dict['winner_label'] = Model.CLASSES[prediction]
+            output_dict['winner_confidence'] = confidence
 
             return output_dict
 
@@ -396,13 +391,11 @@ class Model:
         wav_path = Audio.base64_to_filepath(base64_wav)
         wav_audio = Audio(wav_path)
         wav_audio.preprocess()
-        wav_audio.plot_waveform(display=True)
-        wav_audio.plot_spectrogram(display=True)
         wav_spectro = Spectrography(wav_audio)
         wav_spectro.spectro_augment()
         unlink(wav_path)
 
-        output = self.classify(wav_spectro, unsqueeze=True)
+        output = self.classify(wav_spectro)
         output['Waveform'] = wav_audio.plot_waveform().decode('ascii')
         output['Spectrograph'] = wav_audio.plot_spectrogram().decode('ascii')
 
@@ -501,4 +494,3 @@ if __name__ == '__main__':
     # noinspection PyUnresolvedReferences
     from main import AudioClassifier
     model = Model()
-
