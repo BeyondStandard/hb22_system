@@ -232,7 +232,7 @@ class Model:
         col = ['filename', 'class_id']
 
         dataframes = []
-        for index, folder in enumerate(dataset_path.iterdir()):
+        for index, folder in enumerate(sorted(dataset_path.iterdir())):
             print(index, folder)
             d = DataFrame(((f, index) for f in folder.iterdir()), columns=col)
             dataframes.append(d)
