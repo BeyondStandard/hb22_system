@@ -4,6 +4,7 @@ from typing import Any, List, Dict, Optional
 from fastapi import Depends, FastAPI, File, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
+from yaml import dump
 from crud import create_audio, get_latest_audio
 from crud import get_audios, create_audio
 from schemas import Audio as AudioSchema
@@ -11,6 +12,7 @@ from schemas import Classifier
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base
 import sys
+from sqlalchemy.ext.serializer import dumps
 sys.path.insert(1, './../')
 
 from main import Audio, Spectrography, Model
@@ -107,7 +109,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if result is True:
                 global ingest_state
                 latest_audio = get_latest_audio(next(get_db()))
-                resp = {"state": ingest_state, "data": "hi"}
+                resp = {"state": ingest_state, "data": dumps(latest_audio)}
                 #asyncio.sleep(150)
                 await websocket.send_json(resp)
                 ingest_state = False
