@@ -360,18 +360,12 @@ class Model:
 
     # Classify single audio files
     def classify(self, spectro, unsqueeze=False, normalize=True) -> dict:
-        if unsqueeze:
-            data = spectro.get_spectrography().unsqueeze(0)
-
-        else:
-            data = spectro.get_spectrography()
-
         with torch.no_grad():
-            inputs = data.to(Model.DEVICE)
+            inputs = spectro.get_spectrography().unsqueeze(0)
+            inputs = inputs.to(Model.DEVICE)
 
-            if normalize:
-                inputs_m, inputs_s = inputs.mean(), inputs.std()
-                inputs = (inputs - inputs_m) / inputs_s
+            # inputs_m, inputs_s = inputs.mean(), inputs.std()
+            # inputs = (inputs - inputs_m) / inputs_s
 
             # Get predictions
             output = self.model(inputs)
@@ -381,11 +375,14 @@ class Model:
                 output_dict['confidence'][index] = confidence.item()
 
             confidence, prediction = torch.max(output, 1)
-            output_dict['winner_index'] = prediction.item()
-            output_dict['winner_label'] = Model.CLASSES[prediction.item()]
-            output_dict['winner_confidence'] = confidence.item()
+            confidence, prediction = confidence[0].item(), prediction[0].item()
+
+            output_dict['winner_index'] = prediction
+            output_dict['winner_label'] = Model.CLASSES[prediction]
+            output_dict['winner_confidence'] = confidence
 
             return output_dict
+
 
     # Helper function for the server work
     def server_process(self, base64_wav: str) -> str:
@@ -396,7 +393,7 @@ class Model:
         wav_spectro.spectro_augment()
         unlink(wav_path)
 
-        output = self.classify(wav_spectro, unsqueeze=True)
+        output = self.classify(wav_spectro)
         output['Waveform'] = wav_audio.plot_waveform().decode('ascii')
         output['Spectrograph'] = wav_audio.plot_spectrogram().decode('ascii')
 
