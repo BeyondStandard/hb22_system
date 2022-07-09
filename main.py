@@ -371,7 +371,8 @@ class Model:
             # inputs = (inputs - inputs_m) / inputs_s
 
             # Get predictions
-            output = self.model(torch.cat((inputs, torch.zeros((15, 2, 64, 259)))))
+            inputs = torch.cat((inputs, torch.zeros((15, 2, 64, 259))))
+            output = self.model(inputs)
             output_dict = {'confidence': {}}
 
             for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
