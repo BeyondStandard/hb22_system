@@ -82,8 +82,11 @@ def get_audio(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 @app.post("/ingest", response_model=AudioSchema)
 async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
     
+
     model = Model()
     model.initialize_from_file("./../Models/cloud_with_electric.pt", True)
+    model.model.eval()
+
     result = model.server_process(schema.audio_encoded)
 
     classifier= {
@@ -113,7 +116,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 global ingest_state
                 latest_audio = get_latest_audio(next(get_db()))
                 resp = {"state": ingest_state, "data": object_as_dict(latest_audio)}
-                #asyncio.sleep(150)
                 await websocket.send_json(resp)
                 ingest_state = False
         except Exception as e:
