@@ -96,7 +96,7 @@ class Audio:
     # Pad (or truncate) the signal to a fixed length 'max_ms' in milliseconds
     def pad_trunc(self, max_ms: int = 3000) -> None:
         num_rows, sig_len = self.signal.shape
-        max_len = self.sample_rate // 1000 * max_ms
+        max_len = self.sample_rate * (max_ms // 1000)
 
         # Truncate the signal to the given length
         if sig_len > max_len:
@@ -233,6 +233,7 @@ class Model:
 
         dataframes = []
         for index, folder in enumerate(dataset_path.iterdir()):
+            print(index, folder)
             d = DataFrame(((f, index) for f in folder.iterdir()), columns=col)
             dataframes.append(d)
             Model.CLASSES[index] = "".join(folder.stem.split()[1:])
@@ -362,7 +363,7 @@ class Model:
         print(f'Accuracy: {acc:.2f}, Total items: {total_prediction}')
 
     # Classify single audio files
-    def classify(self, spectro, unsqueeze=False, normalize=True) -> dict:
+    def classify(self, spectro, unsqueeze=False, normalize=False) -> dict:
         if unsqueeze:
             data = spectro.get_spectrography().unsqueeze(0)
 
@@ -395,6 +396,8 @@ class Model:
         wav_path = Audio.base64_to_filepath(base64_wav)
         wav_audio = Audio(wav_path)
         wav_audio.preprocess()
+        wav_audio.plot_waveform(display=True)
+        wav_audio.plot_spectrogram(display=True)
         wav_spectro = Spectrography(wav_audio)
         wav_spectro.spectro_augment()
         unlink(wav_path)
@@ -454,7 +457,7 @@ class AudioClassifier(nn.Module):
         self.conv2.bias.data.zero_()
         conv_layers += [self.conv2, self.relu2, self.bn2]
 
-        # Second Convolution Block
+        # Third Convolution Block
         self.conv3 = nn.Conv2d(16, 32, (3, 3), (2, 2), (1, 1))
         self.relu3 = nn.ReLU()
         self.bn3 = nn.BatchNorm2d(32)
@@ -462,7 +465,7 @@ class AudioClassifier(nn.Module):
         self.conv3.bias.data.zero_()
         conv_layers += [self.conv3, self.relu3, self.bn3]
 
-        # Second Convolution Block
+        # Fourth Convolution Block
         self.conv4 = nn.Conv2d(32, 64, (3, 3), (2, 2), (1, 1))
         self.relu4 = nn.ReLU()
         self.bn4 = nn.BatchNorm2d(64)
@@ -494,5 +497,8 @@ class AudioClassifier(nn.Module):
 
 
 if __name__ == '__main__':
+
+    # noinspection PyUnresolvedReferences
     from main import AudioClassifier
     model = Model()
+
