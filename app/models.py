@@ -25,4 +25,8 @@ class Audio(Base):
     probability = Column(StringType())
     file_name = Column(String)
     audio_encoded = Column(String)
+
+    def as_dict(self):
+       return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+       
   

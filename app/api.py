@@ -107,8 +107,8 @@ async def websocket_endpoint(websocket: WebSocket):
             if result is True:
                 global ingest_state
                 latest_audio = get_latest_audio(next(get_db()))
-                print(dict(latest_audio))
-                resp = {"state": ingest_state, "data": dict(latest_audio)}
+                latest_audio.as_dict()
+                resp = {"state": ingest_state, "data":latest_audio}
                 #asyncio.sleep(150)
                 await websocket.send_json(resp)
                 ingest_state = False
