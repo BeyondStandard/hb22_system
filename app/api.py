@@ -108,8 +108,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 global ingest_state
                 latest_audio = get_latest_audio(next(get_db()))
                 print(latest_audio)
-                resp = {"state": ingest_state, "data": "hi"}
-                asyncio.sleep(150)
+                resp = {"state": ingest_state, "data": latest_audio}
+                #asyncio.sleep(150)
                 await websocket.send_json(resp)
                 ingest_state = False
         except Exception as e:
