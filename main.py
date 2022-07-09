@@ -97,7 +97,7 @@ class Audio:
     # Pad (or truncate) the signal to a fixed length 'max_ms' in milliseconds
     def pad_trunc(self, max_ms: int = 3000) -> None:
         num_rows, sig_len = self.signal.shape
-        max_len = self.sample_rate // 1000 * max_ms
+        max_len = self.sample_rate * (max_ms // 1000)
 
         # Truncate the signal to the given length
         if sig_len > max_len:
@@ -233,7 +233,7 @@ class Model:
         col = ['filename', 'class_id']
 
         dataframes = []
-        for index, folder in enumerate(dataset_path.iterdir()):
+        for index, folder in enumerate(sorted(dataset_path.iterdir())):
             d = DataFrame(((f, index) for f in folder.iterdir()), columns=col)
             dataframes.append(d)
             Model.CLASSES[index] = "".join(folder.stem.split()[1:])
@@ -299,8 +299,8 @@ class Model:
                 labels = data[1].to(Model.DEVICE)
 
                 # Normalize the inputs
-                inputs_m, inputs_s = inputs.mean(), inputs.std()
-                inputs = (inputs - inputs_m) / inputs_s
+                # inputs_m, inputs_s = inputs.mean(), inputs.std()
+                # inputs = (inputs - inputs_m) / inputs_s
 
                 # Zero the parameter gradients
                 optimizer.zero_grad()
@@ -348,8 +348,8 @@ class Model:
                 labels = data[1].to(Model.DEVICE)
 
                 # Normalize the inputs
-                inputs_m, inputs_s = inputs.mean(), inputs.std()
-                inputs = (inputs - inputs_m) / inputs_s
+                # inputs_m, inputs_s = inputs.mean(), inputs.std()
+                # inputs = (inputs - inputs_m) / inputs_s
 
                 # Get predictions
                 outputs = self.model(inputs)
@@ -366,19 +366,13 @@ class Model:
         print(f'Accuracy: {acc:.2f}, Total items: {total_prediction}')
 
     # Classify single audio files
-    def classify(self, spectro, unsqueeze=False, normalize=True) -> dict:
-        if unsqueeze:
-            data = spectro.get_spectrography().unsqueeze(0)
-
-        else:
-            data = spectro.get_spectrography()
-
+    def classify(self, spectro) -> dict:
         with torch.no_grad():
-            inputs = data.to(Model.DEVICE)
+            inputs = spectro.get_spectrography().unsqueeze(0)
+            inputs = inputs.to(Model.DEVICE)
 
-            if normalize:
-                inputs_m, inputs_s = inputs.mean(), inputs.std()
-                inputs = (inputs - inputs_m) / inputs_s
+            # inputs_m, inputs_s = inputs.mean(), inputs.std()
+            # inputs = (inputs - inputs_m) / inputs_s
 
             # Get predictions
             output = self.model(inputs)
@@ -390,10 +384,12 @@ class Model:
                 print(index, type(index))
 
             confidence, prediction = torch.max(output, 1)
-            output_dict['winner_index'] = prediction.item()
-            output_dict['winner_label'] = Model.CLASSES[prediction.item()]
-            output_dict['winner_confidence'] = confidence.item()
-            
+            confidence, prediction = confidence[0].item(), prediction[0].item()
+
+            output_dict['winner_index'] = prediction
+            output_dict['winner_label'] = Model.CLASSES[prediction]
+            output_dict['winner_confidence'] = confidence
+
             return output_dict
 
     # Helper function for the server work
@@ -405,7 +401,7 @@ class Model:
         wav_spectro.spectro_augment()
         unlink(wav_path)
 
-        output = self.classify(wav_spectro, unsqueeze=True)
+        output = self.classify(wav_spectro)
         output['Waveform'] = wav_audio.plot_waveform().decode('ascii')
         output['Spectrograph'] = wav_audio.plot_spectrogram().decode('ascii')
 
@@ -460,7 +456,7 @@ class AudioClassifier(nn.Module):
         self.conv2.bias.data.zero_()
         conv_layers += [self.conv2, self.relu2, self.bn2]
 
-        # Second Convolution Block
+        # Third Convolution Block
         self.conv3 = nn.Conv2d(16, 32, (3, 3), (2, 2), (1, 1))
         self.relu3 = nn.ReLU()
         self.bn3 = nn.BatchNorm2d(32)
@@ -468,7 +464,7 @@ class AudioClassifier(nn.Module):
         self.conv3.bias.data.zero_()
         conv_layers += [self.conv3, self.relu3, self.bn3]
 
-        # Second Convolution Block
+        # Fourth Convolution Block
         self.conv4 = nn.Conv2d(32, 64, (3, 3), (2, 2), (1, 1))
         self.relu4 = nn.ReLU()
         self.bn4 = nn.BatchNorm2d(64)
@@ -478,7 +474,7 @@ class AudioClassifier(nn.Module):
 
         # Linear Classifier
         self.ap = nn.AdaptiveAvgPool2d(output_size=1)
-        self.lin = nn.Linear(in_features=64, out_features=9)
+        self.lin = nn.Linear(in_features=64, out_features=10)
 
         # Wrap the Convolutional Blocks
         self.conv = nn.Sequential(*conv_layers)
@@ -500,8 +496,7 @@ class AudioClassifier(nn.Module):
 
 
 if __name__ == '__main__':
+
+    # noinspection PyUnresolvedReferences
     from main import AudioClassifier
     model = Model()
-    m = torch.load(f'Models/cloud_model_1.pt')
-    model.initialize_from_file('cloud_model_1')
-    model.store_to_file('cloud_model_2')
