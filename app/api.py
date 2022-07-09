@@ -1,6 +1,7 @@
+import asyncio
 from statistics import mode
-from typing import List
-from fastapi import Depends, FastAPI, File, UploadFile
+from typing import Any, List, Dict, Optional
+from fastapi import Depends, FastAPI, File, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 from crud import create_audio, get_latest_audio
@@ -10,15 +11,19 @@ from schemas import Classifier
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base
 import sys
-import json
 sys.path.insert(1, './../')
 
 from main import Audio, Spectrography, Model
 
 Base.metadata.create_all(bind=engine)
 
+ingest_state = False
+
 app = FastAPI()
 handler = Mangum(app)
+
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 
 app.add_middleware(
@@ -29,6 +34,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_event():
+    global ingest_state
+    ingest_state = False
+
+async def set_state():
+    await asyncio.sleep(3)
+    global ingest_state
+    ingest_state = True
+
+async def get_state():
+    await asyncio.sleep(3)
+    global ingest_state
+    return ingest_state
+
 # Dependency
 def get_db():
     db = SessionLocal()
@@ -37,6 +57,10 @@ def get_db():
     finally:
         db.close()
 
+
+async def handler(websocket, path):
+    reply = "lets go"
+    await websocket.send(reply)
 
 @app.get("/")
 def read_root():
@@ -65,5 +89,27 @@ async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
     }
 
     returnvalue =  create_audio(db, schema, classifier)
-    print(returnvalue.probability)
+    loop.run_until_complete(set_state())
     return returnvalue
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    global ingest_state
+    print('Accepting client connection...')
+    await websocket.accept()
+
+    while True:
+        try:
+            global ingest_state
+            # Send message to the client
+            result = await get_state()
+            if result is True:
+                resp = {"state": ingest_state}
+                await websocket.send_json(resp)
+                ingest_state = False
+        except Exception as e:
+            print('error:', e)
+            break
+    print('Bye..')
+
