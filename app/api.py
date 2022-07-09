@@ -106,7 +106,7 @@ async def websocket_endpoint(websocket: WebSocket):
             result = await get_state()
             if result is True:
                 global ingest_state
-                latest_audio = get_latest_audio(get_db())
+                latest_audio = get_latest_audio(next(get_db()))
                 print(latest_audio)
                 resp = {"state": ingest_state, "data": "hi"}
                 asyncio.io.sleep(150)
