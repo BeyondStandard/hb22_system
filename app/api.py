@@ -89,7 +89,7 @@ async def ingest_audio_b64(schema: AudioSchema, db: Session = Depends(get_db)):
     }
 
     returnvalue =  create_audio(db, schema, classifier)
-    loop.run_until_complete(set_state())
+    await set_state()
     return returnvalue
 
 
