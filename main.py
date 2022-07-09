@@ -365,14 +365,13 @@ class Model:
     def classify(self, spectro) -> dict:
         with torch.no_grad():
             inputs = spectro.get_spectrography().unsqueeze(0)
-            inputs = torch.cat((inputs, torch.rand((15, 2, 64, 259))))
             inputs = inputs.to(Model.DEVICE)
 
             # inputs_m, inputs_s = inputs.mean(), inputs.std()
             # inputs = (inputs - inputs_m) / inputs_s
 
             # Get predictions
-            output = self.model(inputs)
+            output = self.model(torch.cat((inputs, torch.zeros((15, 2, 64, 259)))))
             output_dict = {'confidence': {}}
 
             for index, confidence in enumerate(nn.Softmax(dim=0)(output[0])):
@@ -494,4 +493,17 @@ if __name__ == '__main__':
 
     # noinspection PyUnresolvedReferences
     from main import AudioClassifier
-    model = Model()
+    model1 = Model()
+    model1.initialize_from_file('cloud_no_electric')
+    model2 = Model()
+    model2.initialize_from_file('cloud_with_electric')
+    model3 = Model()
+    model3.initialize_from_file('cloud_no_electric')
+    A = Audio(Path(r'Datasets/05 Jeep/5 (5).wav'))
+    A.preprocess()
+    A = Spectrography(A)
+    A.spectro_augment()
+
+    print(model1.classify(A))
+    print(model2.classify(A))
+    print(model3.classify(A))
