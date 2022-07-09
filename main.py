@@ -296,8 +296,8 @@ class Model:
                 labels = data[1].to(Model.DEVICE)
 
                 # Normalize the inputs
-                inputs_m, inputs_s = inputs.mean(), inputs.std()
-                inputs = (inputs - inputs_m) / inputs_s
+                # inputs_m, inputs_s = inputs.mean(), inputs.std()
+                # inputs = (inputs - inputs_m) / inputs_s
 
                 # Zero the parameter gradients
                 optimizer.zero_grad()
@@ -345,8 +345,8 @@ class Model:
                 labels = data[1].to(Model.DEVICE)
 
                 # Normalize the inputs
-                inputs_m, inputs_s = inputs.mean(), inputs.std()
-                inputs = (inputs - inputs_m) / inputs_s
+                # inputs_m, inputs_s = inputs.mean(), inputs.std()
+                # inputs = (inputs - inputs_m) / inputs_s
 
                 # Get predictions
                 outputs = self.model(inputs)
